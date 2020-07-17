@@ -1,0 +1,31 @@
+[package]
+name = "tinyvec_string"
+version = "0.1.0"
+authors = ["Benjamin Scherer <ThatsNoMoon.Alderaan@gmail.com>"]
+edition = "2018"
+description = "tinyvec based string types"
+readme = "README.md"
+repository = "https://github.com/ThatsNoMoon/tinyvec_string"
+license = "MIT OR Apache-2.0"
+keywords = ["no_std", "string", "data-structures"]
+categories = ["no-std", "data-structures", "text-processing"]
+
+[dependencies]
+tinyvec = "0.3"
+
+[features]
+
+default = []
+
+alloc = ["tinyvec/alloc"]
+
+std = ["alloc"]
+
+[package.metadata.docs.rs]
+# Build docs with all features, show what things need a feature enabled
+rustdoc-args = ["--cfg","docs_rs"]
+all-features = true
+
+[[test]]
+name = "tinystring"
+required-features = ["alloc"]
