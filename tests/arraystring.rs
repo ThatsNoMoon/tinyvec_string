@@ -1,10 +1,7 @@
 use tinyvec::ArrayVec;
 use tinyvec_string::arraystring::*;
 
-use std::{
-	borrow::Cow,
-	convert::{TryFrom, TryInto},
-};
+use std::{borrow::Cow, convert::TryInto};
 
 #[test]
 fn test_from_str() {
@@ -49,7 +46,7 @@ fn test_from_utf8() {
 
 	assert_eq!(
 		ArrayString::from_utf8(xs).unwrap(),
-		ArrayString::<[u8; 32]>::try_from("ศไทย中华Việt Nam").unwrap()
+		ArrayString::<[u8; 32]>::from("ศไทย中华Việt Nam")
 	);
 
 	let s = b"hello\xFF";
@@ -72,7 +69,7 @@ fn test_from_utf8() {
 
 #[test]
 fn test_push_bytes() {
-	let mut s = ArrayString::<[u8; 16]>::try_from("ABC").unwrap();
+	let mut s = ArrayString::<[u8; 16]>::from("ABC");
 	unsafe {
 		let mv = s.as_mut_vec();
 		mv.extend_from_slice(&[b'D']);
@@ -129,7 +126,7 @@ fn test_pop() {
 #[test]
 fn test_split_off_empty() {
 	let orig = "Hello, world!";
-	let mut split = ArrayString::<[u8; 16]>::try_from(orig).unwrap();
+	let mut split = ArrayString::<[u8; 16]>::from(orig);
 	let empty: ArrayString<[u8; 16]> = split.split_off(orig.len());
 	assert!(empty.is_empty());
 }
@@ -138,20 +135,20 @@ fn test_split_off_empty() {
 #[should_panic]
 fn test_split_off_past_end() {
 	let orig = "Hello, world!";
-	let mut split = ArrayString::<[u8; 16]>::try_from(orig).unwrap();
+	let mut split = ArrayString::<[u8; 16]>::from(orig);
 	let _ = split.split_off(orig.len() + 1);
 }
 
 #[test]
 #[should_panic]
 fn test_split_off_mid_char() {
-	let mut orig = ArrayString::<[u8; 16]>::try_from("山").unwrap();
+	let mut orig = ArrayString::<[u8; 16]>::from("山");
 	let _ = orig.split_off(1);
 }
 
 #[test]
 fn test_split_off_ascii() {
-	let mut ab = ArrayString::<[u8; 16]>::try_from("ABCD").unwrap();
+	let mut ab = ArrayString::<[u8; 16]>::from("ABCD");
 	let cd = ab.split_off(2);
 	assert_eq!(ab, "AB");
 	assert_eq!(cd, "CD");
@@ -159,7 +156,7 @@ fn test_split_off_ascii() {
 
 #[test]
 fn test_split_off_unicode() {
-	let mut nihon = ArrayString::<[u8; 16]>::try_from("日本語").unwrap();
+	let mut nihon = ArrayString::<[u8; 16]>::from("日本語");
 	let go = nihon.split_off("日本".len());
 	assert_eq!(nihon, "日本");
 	assert_eq!(go, "語");
@@ -167,7 +164,7 @@ fn test_split_off_unicode() {
 
 #[test]
 fn test_str_truncate() {
-	let mut s = ArrayString::<[u8; 16]>::try_from("12345").unwrap();
+	let mut s = ArrayString::<[u8; 16]>::from("12345");
 	s.truncate(5);
 	assert_eq!(s, "12345");
 	s.truncate(3);
@@ -175,7 +172,7 @@ fn test_str_truncate() {
 	s.truncate(0);
 	assert_eq!(s, "");
 
-	let mut s = ArrayString::<[u8; 16]>::try_from("12345").unwrap();
+	let mut s = ArrayString::<[u8; 16]>::from("12345");
 	let p = s.as_ptr();
 	s.truncate(3);
 	s.push_str("6");
@@ -185,7 +182,7 @@ fn test_str_truncate() {
 
 #[test]
 fn test_str_truncate_invalid_len() {
-	let mut s = ArrayString::<[u8; 16]>::try_from("12345").unwrap();
+	let mut s = ArrayString::<[u8; 16]>::from("12345");
 	s.truncate(6);
 	assert_eq!(s, "12345");
 }
@@ -193,13 +190,13 @@ fn test_str_truncate_invalid_len() {
 #[test]
 #[should_panic]
 fn test_str_truncate_split_codepoint() {
-	let mut s = ArrayString::<[u8; 16]>::try_from("\u{FC}").unwrap(); // ü
+	let mut s = ArrayString::<[u8; 16]>::from("\u{FC}"); // ü
 	s.truncate(1);
 }
 
 #[test]
 fn test_str_clear() {
-	let mut s = ArrayString::<[u8; 16]>::try_from("12345").unwrap();
+	let mut s = ArrayString::<[u8; 16]>::from("12345");
 	s.clear();
 	assert_eq!(s.len(), 0);
 	assert_eq!(s, "");
@@ -207,7 +204,7 @@ fn test_str_clear() {
 
 #[test]
 fn test_str_add() {
-	let a = ArrayString::<[u8; 16]>::try_from("12345").unwrap();
+	let a = ArrayString::<[u8; 16]>::from("12345");
 	let b = a + "2";
 	let b = b + "2";
 	assert_eq!(b.len(), 7);
@@ -227,12 +224,12 @@ fn remove() {
 #[test]
 #[should_panic]
 fn remove_bad() {
-	ArrayString::<[u8; 16]>::try_from("ศ").unwrap().remove(1);
+	ArrayString::<[u8; 16]>::from("ศ").remove(1);
 }
 
 #[test]
 fn test_retain() {
-	let mut s = ArrayString::<[u8; 16]>::try_from("α_β_γ").unwrap();
+	let mut s = ArrayString::<[u8; 16]>::from("α_β_γ");
 
 	s.retain(|_| true);
 	assert_eq!(s, "α_β_γ");
@@ -252,7 +249,7 @@ fn test_retain() {
 
 #[test]
 fn insert() {
-	let mut s = ArrayString::<[u8; 32]>::try_from("foobar").unwrap();
+	let mut s = ArrayString::<[u8; 32]>::from("foobar");
 	let mut bits = [0; 4];
 	let bits = 'ệ'.encode_utf8(&mut bits).as_bytes();
 	println!("self len: {}; bytes len: {}", s.len(), bits.len());
@@ -273,14 +270,12 @@ fn insert_bad1() {
 #[test]
 #[should_panic]
 fn insert_bad2() {
-	ArrayString::<[u8; 16]>::try_from("ệ")
-		.unwrap()
-		.insert(1, 't');
+	ArrayString::<[u8; 16]>::from("ệ").insert(1, 't');
 }
 
 #[test]
 fn test_slicing() {
-	let s = ArrayString::<[u8; 16]>::try_from("foobar").unwrap();
+	let s = ArrayString::<[u8; 16]>::from("foobar");
 	assert_eq!("foobar", &s[..]);
 	assert_eq!("foo", &s[..3]);
 	assert_eq!("bar", &s[3..]);
@@ -311,11 +306,11 @@ fn test_from_iterator() {
 
 #[test]
 fn test_drain() {
-	let mut s = ArrayString::<[u8; 16]>::try_from("αβγ").unwrap();
+	let mut s = ArrayString::<[u8; 16]>::from("αβγ");
 	assert_eq!(s.drain(2..4).collect::<ArrayString<[u8; 16]>>(), "β");
 	assert_eq!(s, "αγ");
 
-	let mut t = ArrayString::<[u8; 16]>::try_from("abcd").unwrap();
+	let mut t = ArrayString::<[u8; 16]>::from("abcd");
 	t.drain(..0);
 	assert_eq!(t, "abcd");
 	t.drain(..1);
@@ -328,7 +323,7 @@ fn test_drain() {
 
 #[test]
 fn test_extend_ref() {
-	let mut a = ArrayString::<[u8; 16]>::try_from("foo").unwrap();
+	let mut a = ArrayString::<[u8; 16]>::from("foo");
 	a.extend(&['b', 'a', 'r']);
 
 	assert_eq!(&a, "foobar");
