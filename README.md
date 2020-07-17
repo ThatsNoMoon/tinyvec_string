@@ -1,5 +1,5 @@
-[![crates.io](https://img.shields.io/crates/v/tinyvec.svg)](https://crates.io/crates/tinyvec_string)
-[![docs.rs](https://docs.rs/tinyvec/badge.svg)](https://docs.rs/tinyvec_string/)
+[![crates.io](https://img.shields.io/crates/v/tinyvec_string.svg)](https://crates.io/crates/tinyvec_string)
+[![docs.rs](https://docs.rs/tinyvec_string/badge.svg)](https://docs.rs/tinyvec_string/)
 
 # tinyvec_string
 
