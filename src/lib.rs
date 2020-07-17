@@ -29,7 +29,7 @@
 //! code is copied verbatim from `std`'s `String` implementation for maximum
 //! reliability and performance.
 //!
-//! [`tinyvec`]: tinyvec.html
+//! [`tinyvec`]: tinyvec/index.html
 //! [`ArrayString`]: arraystring/struct.ArrayString.html
 //! [`TinyString`]: tinystring/struct.TinyString.html
 //! [`ArrayVec`]: tinyvec/struct.ArrayVec.html

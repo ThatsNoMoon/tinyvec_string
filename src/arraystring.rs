@@ -89,8 +89,7 @@ impl<A: ByteArray> Default for ArrayString<A> {
 impl<A: ByteArray> ArrayString<A> {
 	/// Creates a new empty `ArrayString`.
 	///
-	/// This creates a new [`ArrayVec`] with a backing array type `A`, using
-	/// the backing array of zeroes.
+	/// This creates a new [`ArrayVec`] with a backing array of zeroes.
 	///
 	/// # Examples
 	///
@@ -214,8 +213,9 @@ impl<A: ByteArray> ArrayString<A> {
 	///
 	/// This function is unsafe because it does not check that the bytes passed
 	/// to it are valid UTF-8. If this constraint is violated, it may cause
-	/// memory unsafety issues with future users of the `String`, as the rest of
-	/// the standard library assumes that `String`s are valid UTF-8.
+	/// memory unsafety issues with future users of the `ArrayString`, as the
+	/// rest of this library and the standard library assumes that `str`s are
+	/// valid UTF-8.
 	///
 	/// # Examples
 	///
@@ -248,7 +248,7 @@ impl<A: ByteArray> ArrayString<A> {
 	///
 	/// assert_eq!(&[104, 101, 108, 108, 111][..], &bytes[..]);
 	/// ```
-	/// [`ArrayVec`]: https://docs.rs/tinyvec/0.3/tinyvec/struct.ArrayVec.html
+	/// [`ArrayVec`]: ../tinyvec/struct.ArrayVec.html
 	#[inline]
 	pub fn into_bytes(self) -> ArrayVec<A> {
 		self.vec
@@ -484,7 +484,7 @@ impl<A: ByteArray> ArrayString<A> {
 	///
 	/// Returns [`None`] if this `String` is empty.
 	///
-	/// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html#variant.Some
+	/// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html#variant.None
 	///
 	/// # Examples
 	///
@@ -722,8 +722,8 @@ impl<A: ByteArray> ArrayString<A> {
 		self.vec.clear()
 	}
 
-	/// Creates a draining iterator that removes the specified range in the `String`
-	/// and yields the removed `chars`.
+	/// Creates a draining iterator that removes the specified range in the
+	/// `ArrayString` and yields the removed `chars`.
 	///
 	/// Note: The element range is removed even if the iterator is not
 	/// consumed until the end.

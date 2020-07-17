@@ -62,8 +62,7 @@ impl<A: ByteArray> Default for TinyString<A> {
 impl<A: ByteArray> TinyString<A> {
 	/// Creates a new empty `TinyString`.
 	///
-	/// This creates a new [`TinyVec`] with a backing array type `A` using its
-	/// `Default` implementation (which should fill the array with zeroes).
+	/// This creates a new [`TinyVec`] with a backing array of zeroes.
 	///
 	/// # Examples
 	///
@@ -144,8 +143,9 @@ impl<A: ByteArray> TinyString<A> {
 	///
 	/// This function is unsafe because it does not check that the bytes passed
 	/// to it are valid UTF-8. If this constraint is violated, it may cause
-	/// memory unsafety issues with future users of the `String`, as the rest of
-	/// the standard library assumes that `String`s are valid UTF-8.
+	/// memory unsafety issues with future users of the `TinyString`, as the
+	/// rest of this library and the standard library assumes that `str`s are
+	/// valid UTF-8.
 	///
 	/// # Examples
 	///
@@ -179,7 +179,7 @@ impl<A: ByteArray> TinyString<A> {
 	///
 	/// assert_eq!(&[104, 101, 108, 108, 111][..], &bytes[..]);
 	/// ```
-	/// [`TinyVec`]: https://docs.rs/tinyvec/0.3/tinyvec/struct.TinyVec.html
+	/// [`TinyVec`]: ../tinyvec/enum.TinyVec.html
 	#[inline]
 	pub fn into_bytes(self) -> TinyVec<A> {
 		self.vec
@@ -413,7 +413,7 @@ impl<A: ByteArray> TinyString<A> {
 	///
 	/// Returns [`None`] if this `String` is empty.
 	///
-	/// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html#variant.Some
+	/// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html#variant.None
 	///
 	/// # Examples
 	///
@@ -673,8 +673,8 @@ impl<A: ByteArray> TinyString<A> {
 		self.vec.clear()
 	}
 
-	/// Creates a draining iterator that removes the specified range in the `String`
-	/// and yields the removed `chars`.
+	/// Creates a draining iterator that removes the specified range in the
+	/// `TinyString` and yields the removed `chars`.
 	///
 	/// Note: The element range is removed even if the iterator is not
 	/// consumed until the end.
