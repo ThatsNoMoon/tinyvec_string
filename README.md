@@ -1,5 +1,6 @@
 [![crates.io](https://img.shields.io/crates/v/tinyvec_string.svg)](https://crates.io/crates/tinyvec_string)
 [![docs.rs](https://docs.rs/tinyvec_string/badge.svg)](https://docs.rs/tinyvec_string/)
+![Tests](https://github.com/ThatsNoMoon/tinyvec_string/workflows/Tests/badge.svg)
 
 # tinyvec_string
 
