@@ -1,5 +1,5 @@
 //! [`ArrayVec`](../tinyvec/struct.ArrayVec.html) backed strings
-use crate::tinyvec::{Array, ArrayVec};
+use crate::{bytearray::ByteArray, tinyvec::ArrayVec};
 
 use core::{
 	convert::{TryFrom, TryInto},
@@ -72,17 +72,25 @@ use alloc::{borrow::Cow, string::String};
 /// [`Vec`]: https://doc.rust-lang.org/std/vec/struct.Vec.html
 /// [`TryFrom`]: https://doc.rust-lang.org/std/convert/trait.TryFrom.html
 /// [`from`]: #method.from
-#[derive(Default, Copy, Eq, PartialOrd, Ord)]
+#[derive(Copy, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct ArrayString<A: Array<Item = u8>> {
+pub struct ArrayString<A: ByteArray> {
 	vec: ArrayVec<A>,
 }
 
-impl<A: Array<Item = u8> + Default> ArrayString<A> {
+impl<A: ByteArray> Default for ArrayString<A> {
+	fn default() -> Self {
+		ArrayString {
+			vec: ArrayVec::from_array_len(A::DEFAULT, 0),
+		}
+	}
+}
+
+impl<A: ByteArray> ArrayString<A> {
 	/// Creates a new empty `ArrayString`.
 	///
-	/// This creates a new [`ArrayVec`] with a backing array type `A` using its
-	/// `Default` implementation (which should fill the array with zeroes).
+	/// This creates a new [`ArrayVec`] with a backing array type `A`, using
+	/// the backing array of zeroes.
 	///
 	/// # Examples
 	///
@@ -140,9 +148,7 @@ impl<A: Array<Item = u8> + Default> ArrayString<A> {
 	{
 		s.try_into().expect("Failed to convert into ArrayString")
 	}
-}
 
-impl<A: Array<Item = u8>> ArrayString<A> {
 	/// Converts a vector of bytes to an `ArrayString`.
 	///
 	/// `ArrayString` is backed by `ArrayVec`, so after ensuring valid UTF-8,
@@ -776,9 +782,7 @@ impl<A: Array<Item = u8>> ArrayString<A> {
 			string: self_ptr,
 		}
 	}
-}
 
-impl<A: Array<Item = u8> + Default> ArrayString<A> {
 	/// Splits the string into two at the given index.
 	///
 	/// Returns a new `ArrayString`. `self` contains bytes `[0, at)`, and
@@ -806,7 +810,16 @@ impl<A: Array<Item = u8> + Default> ArrayString<A> {
 	#[must_use = "use `.truncate()` if you don't need the other half"]
 	pub fn split_off(&mut self, at: usize) -> ArrayString<A> {
 		assert!(self.is_char_boundary(at));
-		let other = self.vec.split_off(at);
+
+		// can't use `ArrayVec::split_off` without a `Default` bound
+		let mut other = ArrayVec::from(A::DEFAULT);
+		let moves = &mut self.vec[at..];
+		let split_len = moves.len();
+		let targets = &mut other[..split_len];
+		moves.swap_with_slice(targets);
+		other.set_len(split_len);
+		self.vec.set_len(at);
+
 		unsafe { ArrayString::from_utf8_unchecked(other) }
 	}
 }
@@ -831,7 +844,7 @@ impl ArrayString<[u8; 4]> {
 	}
 }
 
-impl<A: Array<Item = u8>> Deref for ArrayString<A> {
+impl<A: ByteArray> Deref for ArrayString<A> {
 	type Target = str;
 
 	fn deref(&self) -> &str {
@@ -839,34 +852,34 @@ impl<A: Array<Item = u8>> Deref for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> DerefMut for ArrayString<A> {
+impl<A: ByteArray> DerefMut for ArrayString<A> {
 	fn deref_mut(&mut self) -> &mut str {
 		unsafe { str::from_utf8_unchecked_mut(&mut *self.vec) }
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Display for ArrayString<A> {
+impl<A: ByteArray> fmt::Display for ArrayString<A> {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Display::fmt(&**self, f)
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Debug for ArrayString<A> {
+impl<A: ByteArray> fmt::Debug for ArrayString<A> {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Debug::fmt(&**self, f)
 	}
 }
 
-impl<A: Array<Item = u8>> Hash for ArrayString<A> {
+impl<A: ByteArray> Hash for ArrayString<A> {
 	#[inline]
 	fn hash<H: Hasher>(&self, hasher: &mut H) {
 		(**self).hash(hasher)
 	}
 }
 
-impl<A: Array<Item = u8> + Clone> Clone for ArrayString<A> {
+impl<A: ByteArray + Clone> Clone for ArrayString<A> {
 	fn clone(&self) -> Self {
 		ArrayString {
 			vec: self.vec.clone(),
@@ -878,8 +891,8 @@ impl<A: Array<Item = u8> + Clone> Clone for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8> + Default, A2: Array<Item = u8>>
-	FromIterator<ArrayString<A2>> for ArrayString<A>
+impl<A: ByteArray, A2: ByteArray> FromIterator<ArrayString<A2>>
+	for ArrayString<A>
 {
 	/// # Panics
 	///
@@ -896,7 +909,7 @@ macro_rules! impl_from_iterator {
 	($(#[$meta:meta])* $ty:ty) => {
 		$(#[$meta])*
 		#[allow(unused_lifetimes)]
-		impl<'a, A: Array<Item = u8> + Default> FromIterator<$ty>
+		impl<'a, A: ByteArray> FromIterator<$ty>
 			for ArrayString<A>
 		{
 			/// # Panics
@@ -924,7 +937,7 @@ impl_from_iterator!(&'a str);
 impl_from_iterator!(&'a char);
 impl_from_iterator!(char);
 
-impl<A: Array<Item = u8>> Extend<char> for ArrayString<A> {
+impl<A: ByteArray> Extend<char> for ArrayString<A> {
 	/// # Panics
 	///
 	/// Panics if the new length would be longer than the capacity of the backing
@@ -935,7 +948,7 @@ impl<A: Array<Item = u8>> Extend<char> for ArrayString<A> {
 	}
 }
 
-impl<'a, A: Array<Item = u8>> Extend<&'a char> for ArrayString<A> {
+impl<'a, A: ByteArray> Extend<&'a char> for ArrayString<A> {
 	/// # Panics
 	///
 	/// Panics if the new length would be longer than the capacity of the backing
@@ -945,7 +958,7 @@ impl<'a, A: Array<Item = u8>> Extend<&'a char> for ArrayString<A> {
 	}
 }
 
-impl<'a, A: Array<Item = u8>> Extend<&'a str> for ArrayString<A> {
+impl<'a, A: ByteArray> Extend<&'a str> for ArrayString<A> {
 	/// # Panics
 	///
 	/// Panics if the new length would be longer than the capacity of the backing
@@ -957,7 +970,7 @@ impl<'a, A: Array<Item = u8>> Extend<&'a str> for ArrayString<A> {
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-impl<A: Array<Item = u8>> Extend<String> for ArrayString<A> {
+impl<A: ByteArray> Extend<String> for ArrayString<A> {
 	/// # Panics
 	///
 	/// Panics if the new length would be longer than the capacity of the backing
@@ -967,9 +980,7 @@ impl<A: Array<Item = u8>> Extend<String> for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>, A2: Array<Item = u8>> Extend<ArrayString<A2>>
-	for ArrayString<A>
-{
+impl<A: ByteArray, A2: ByteArray> Extend<ArrayString<A2>> for ArrayString<A> {
 	/// # Panics
 	///
 	/// Panics if the new length would be longer than the capacity of the backing
@@ -981,7 +992,7 @@ impl<A: Array<Item = u8>, A2: Array<Item = u8>> Extend<ArrayString<A2>>
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-impl<'a, A: Array<Item = u8>> Extend<Cow<'a, str>> for ArrayString<A> {
+impl<'a, A: ByteArray> Extend<Cow<'a, str>> for ArrayString<A> {
 	/// # Panics
 	///
 	/// Panics if the new length would be longer than the capacity of the backing
@@ -995,7 +1006,7 @@ macro_rules! impl_eq {
 	($(#[$meta:meta])* $lhs:ty, $rhs: ty) => {
 		$(#[$meta])*
 		#[allow(unused_lifetimes)]
-		impl<'a, 'b, A: Array<Item = u8>> PartialEq<$rhs> for $lhs {
+		impl<'a, 'b, A: ByteArray> PartialEq<$rhs> for $lhs {
 			#[inline]
 			fn eq(&self, other: &$rhs) -> bool {
 				PartialEq::eq(&self[..], &other[..])
@@ -1008,7 +1019,7 @@ macro_rules! impl_eq {
 
 		$(#[$meta])*
 		#[allow(unused_lifetimes)]
-		impl<'a, 'b, A: Array<Item = u8>> PartialEq<$lhs> for $rhs {
+		impl<'a, 'b, A: ByteArray> PartialEq<$lhs> for $rhs {
 			#[inline]
 			fn eq(&self, other: &$lhs) -> bool {
 				PartialEq::eq(&self[..], &other[..])
@@ -1036,8 +1047,8 @@ impl_eq! {
 
 impl<A1, A2> PartialEq<ArrayString<A1>> for ArrayString<A2>
 where
-	A1: Array<Item = u8>,
-	A2: Array<Item = u8>,
+	A1: ByteArray,
+	A2: ByteArray,
 {
 	#[inline]
 	fn eq(&self, other: &ArrayString<A1>) -> bool {
@@ -1066,7 +1077,7 @@ where
 /// let c = a + b;
 /// assert_eq!(c, "Hello, World!");
 /// ```
-impl<A: Array<Item = u8> + Default> Add<&str> for ArrayString<A> {
+impl<A: ByteArray> Add<&str> for ArrayString<A> {
 	type Output = ArrayString<A>;
 
 	#[inline]
@@ -1097,14 +1108,14 @@ impl<A: Array<Item = u8> + Default> Add<&str> for ArrayString<A> {
 /// ```
 ///
 /// [`push_str`]: struct.ArrayString.html#method.push_str
-impl<A: Array<Item = u8>> AddAssign<&str> for ArrayString<A> {
+impl<A: ByteArray> AddAssign<&str> for ArrayString<A> {
 	#[inline]
 	fn add_assign(&mut self, other: &str) {
 		self.push_str(other);
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::Range<usize>> for ArrayString<A> {
+impl<A: ByteArray> ops::Index<ops::Range<usize>> for ArrayString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1113,7 +1124,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::Range<usize>> for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeTo<usize>> for ArrayString<A> {
+impl<A: ByteArray> ops::Index<ops::RangeTo<usize>> for ArrayString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1122,7 +1133,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeTo<usize>> for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeFrom<usize>> for ArrayString<A> {
+impl<A: ByteArray> ops::Index<ops::RangeFrom<usize>> for ArrayString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1131,7 +1142,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeFrom<usize>> for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeFull> for ArrayString<A> {
+impl<A: ByteArray> ops::Index<ops::RangeFull> for ArrayString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1140,9 +1151,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeFull> for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeInclusive<usize>>
-	for ArrayString<A>
-{
+impl<A: ByteArray> ops::Index<ops::RangeInclusive<usize>> for ArrayString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1151,9 +1160,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeInclusive<usize>>
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeToInclusive<usize>>
-	for ArrayString<A>
-{
+impl<A: ByteArray> ops::Index<ops::RangeToInclusive<usize>> for ArrayString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1162,39 +1169,35 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeToInclusive<usize>>
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::Range<usize>> for ArrayString<A> {
+impl<A: ByteArray> ops::IndexMut<ops::Range<usize>> for ArrayString<A> {
 	#[inline]
 	fn index_mut(&mut self, index: ops::Range<usize>) -> &mut str {
 		&mut self[..][index]
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeTo<usize>>
-	for ArrayString<A>
-{
+impl<A: ByteArray> ops::IndexMut<ops::RangeTo<usize>> for ArrayString<A> {
 	#[inline]
 	fn index_mut(&mut self, index: ops::RangeTo<usize>) -> &mut str {
 		&mut self[..][index]
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeFrom<usize>>
-	for ArrayString<A>
-{
+impl<A: ByteArray> ops::IndexMut<ops::RangeFrom<usize>> for ArrayString<A> {
 	#[inline]
 	fn index_mut(&mut self, index: ops::RangeFrom<usize>) -> &mut str {
 		&mut self[..][index]
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeFull> for ArrayString<A> {
+impl<A: ByteArray> ops::IndexMut<ops::RangeFull> for ArrayString<A> {
 	#[inline]
 	fn index_mut(&mut self, _index: ops::RangeFull) -> &mut str {
 		unsafe { str::from_utf8_unchecked_mut(&mut *self.vec) }
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeInclusive<usize>>
+impl<A: ByteArray> ops::IndexMut<ops::RangeInclusive<usize>>
 	for ArrayString<A>
 {
 	#[inline]
@@ -1203,7 +1206,7 @@ impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeInclusive<usize>>
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeToInclusive<usize>>
+impl<A: ByteArray> ops::IndexMut<ops::RangeToInclusive<usize>>
 	for ArrayString<A>
 {
 	#[inline]
@@ -1212,21 +1215,21 @@ impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeToInclusive<usize>>
 	}
 }
 
-impl<A: Array<Item = u8>> AsRef<str> for ArrayString<A> {
+impl<A: ByteArray> AsRef<str> for ArrayString<A> {
 	#[inline]
 	fn as_ref(&self) -> &str {
 		&*self
 	}
 }
 
-impl<A: Array<Item = u8>> AsMut<str> for ArrayString<A> {
+impl<A: ByteArray> AsMut<str> for ArrayString<A> {
 	#[inline]
 	fn as_mut(&mut self) -> &mut str {
 		&mut *self
 	}
 }
 
-impl<A: Array<Item = u8>> AsRef<[u8]> for ArrayString<A> {
+impl<A: ByteArray> AsRef<[u8]> for ArrayString<A> {
 	#[inline]
 	fn as_ref(&self) -> &[u8] {
 		self.as_bytes()
@@ -1297,11 +1300,11 @@ impl<S: fmt::Display> fmt::Display for CapacityOverflowError<S> {
 	}
 }
 
-impl<'a, A: Array<Item = u8> + Default> TryFrom<&'a str> for ArrayString<A> {
+impl<'a, A: ByteArray> TryFrom<&'a str> for ArrayString<A> {
 	type Error = CapacityOverflowError<&'a str>;
 
 	fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-		let mut arr = A::default();
+		let mut arr = A::DEFAULT;
 		let slice = arr.as_slice_mut();
 		if s.len() <= slice.len() {
 			slice[..s.len()].copy_from_slice(s.as_bytes());
@@ -1320,9 +1323,7 @@ impl<'a, A: Array<Item = u8> + Default> TryFrom<&'a str> for ArrayString<A> {
 	}
 }
 
-impl<'a, A: Array<Item = u8> + Default> TryFrom<&'a mut str>
-	for ArrayString<A>
-{
+impl<'a, A: ByteArray> TryFrom<&'a mut str> for ArrayString<A> {
 	type Error = CapacityOverflowError<&'a mut str>;
 
 	fn try_from(s: &'a mut str) -> Result<Self, Self::Error> {
@@ -1336,7 +1337,7 @@ impl<'a, A: Array<Item = u8> + Default> TryFrom<&'a mut str>
 	}
 }
 
-impl<'c, A: Array<Item = u8> + Default> TryFrom<&'c char> for ArrayString<A> {
+impl<'c, A: ByteArray> TryFrom<&'c char> for ArrayString<A> {
 	type Error = CapacityOverflowError<&'c char>;
 
 	fn try_from(c: &'c char) -> Result<Self, Self::Error> {
@@ -1349,7 +1350,7 @@ impl<'c, A: Array<Item = u8> + Default> TryFrom<&'c char> for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8> + Default> TryFrom<char> for ArrayString<A> {
+impl<A: ByteArray> TryFrom<char> for ArrayString<A> {
 	type Error = CapacityOverflowError<char>;
 
 	fn try_from(c: char) -> Result<Self, Self::Error> {
@@ -1364,7 +1365,7 @@ impl<A: Array<Item = u8> + Default> TryFrom<char> for ArrayString<A> {
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-impl<'a, A: Array<Item = u8> + Default> TryFrom<&'a String> for ArrayString<A> {
+impl<'a, A: ByteArray> TryFrom<&'a String> for ArrayString<A> {
 	type Error = CapacityOverflowError<&'a String>;
 
 	fn try_from(s: &'a String) -> Result<Self, Self::Error> {
@@ -1377,7 +1378,7 @@ impl<'a, A: Array<Item = u8> + Default> TryFrom<&'a String> for ArrayString<A> {
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-impl<A: Array<Item = u8> + Default> TryFrom<String> for ArrayString<A> {
+impl<A: ByteArray> TryFrom<String> for ArrayString<A> {
 	type Error = CapacityOverflowError<String>;
 
 	fn try_from(s: String) -> Result<Self, Self::Error> {
@@ -1393,9 +1394,7 @@ impl<A: Array<Item = u8> + Default> TryFrom<String> for ArrayString<A> {
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-impl<'a, A: Array<Item = u8> + Default> TryFrom<Cow<'a, str>>
-	for ArrayString<A>
-{
+impl<'a, A: ByteArray> TryFrom<Cow<'a, str>> for ArrayString<A> {
 	type Error = CapacityOverflowError<Cow<'a, str>>;
 
 	fn try_from(s: Cow<'a, str>) -> Result<Self, Self::Error> {
@@ -1409,7 +1408,7 @@ impl<'a, A: Array<Item = u8> + Default> TryFrom<Cow<'a, str>>
 	}
 }
 
-impl<A: Array<Item = u8> + Default> FromStr for ArrayString<A> {
+impl<A: ByteArray> FromStr for ArrayString<A> {
 	/// Because of lifetime restrictions, the error type can't return the
 	/// provided string like the `TryFrom` implementations do.
 	type Err = CapacityOverflowError<()>;
@@ -1422,7 +1421,7 @@ impl<A: Array<Item = u8> + Default> FromStr for ArrayString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Write for ArrayString<A> {
+impl<A: ByteArray> fmt::Write for ArrayString<A> {
 	#[inline]
 	fn write_str(&mut self, s: &str) -> fmt::Result {
 		self.push_str(s);
@@ -1471,12 +1470,12 @@ impl<A: Array<Item = u8>> fmt::Write for ArrayString<A> {
 /// assert_eq!(Err(array_vec![0, 159]), value.map_err(|e| e.into_bytes()));
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct FromUtf8Error<A: Array<Item = u8>> {
+pub struct FromUtf8Error<A: ByteArray> {
 	vec: ArrayVec<A>,
 	error: Utf8Error,
 }
 
-impl<A: Array<Item = u8>> FromUtf8Error<A> {
+impl<A: ByteArray> FromUtf8Error<A> {
 	/// Returns a slice of [`u8`]s bytes that were attempted to convert to an
 	/// `ArrayString`.
 	///
@@ -1544,7 +1543,7 @@ impl<A: Array<Item = u8>> FromUtf8Error<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Debug for FromUtf8Error<A> {
+impl<A: ByteArray> fmt::Debug for FromUtf8Error<A> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("FromUtf8Error")
 			.field("vec", &self.vec)
@@ -1553,7 +1552,7 @@ impl<A: Array<Item = u8>> fmt::Debug for FromUtf8Error<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Display for FromUtf8Error<A> {
+impl<A: ByteArray> fmt::Display for FromUtf8Error<A> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Display::fmt(&self.error, f)
 	}
@@ -1561,7 +1560,7 @@ impl<A: Array<Item = u8>> fmt::Display for FromUtf8Error<A> {
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "std")))]
 #[cfg(feature = "std")]
-impl<A: Array<Item = u8>> std::error::Error for FromUtf8Error<A> {}
+impl<A: ByteArray> std::error::Error for FromUtf8Error<A> {}
 
 /// A draining iterator for [`ArrayString`].
 ///
@@ -1570,7 +1569,7 @@ impl<A: Array<Item = u8>> std::error::Error for FromUtf8Error<A> {}
 ///
 /// [`drain`]: struct.ArrayString.html#method.drain
 /// [`ArrayString`]: struct.ArrayString.html
-pub struct Drain<'a, A: Array<Item = u8>> {
+pub struct Drain<'a, A: ByteArray> {
 	/// Will be used as &'a mut ArrayString in the destructor
 	string: *mut ArrayString<A>,
 	/// Start of part to remove
@@ -1581,16 +1580,16 @@ pub struct Drain<'a, A: Array<Item = u8>> {
 	iter: Chars<'a>,
 }
 
-impl<A: Array<Item = u8>> fmt::Debug for Drain<'_, A> {
+impl<A: ByteArray> fmt::Debug for Drain<'_, A> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.pad("Drain { .. }")
 	}
 }
 
-unsafe impl<A: Array<Item = u8>> Send for Drain<'_, A> {}
-unsafe impl<A: Array<Item = u8>> Sync for Drain<'_, A> {}
+unsafe impl<A: ByteArray> Send for Drain<'_, A> {}
+unsafe impl<A: ByteArray> Sync for Drain<'_, A> {}
 
-impl<A: Array<Item = u8>> Drop for Drain<'_, A> {
+impl<A: ByteArray> Drop for Drain<'_, A> {
 	fn drop(&mut self) {
 		unsafe {
 			// Use Vec::drain. "Reaffirm" the bounds checks to avoid
@@ -1603,7 +1602,7 @@ impl<A: Array<Item = u8>> Drop for Drain<'_, A> {
 	}
 }
 
-impl<A: Array<Item = u8>> Iterator for Drain<'_, A> {
+impl<A: ByteArray> Iterator for Drain<'_, A> {
 	type Item = char;
 
 	#[inline]
@@ -1621,11 +1620,11 @@ impl<A: Array<Item = u8>> Iterator for Drain<'_, A> {
 	}
 }
 
-impl<A: Array<Item = u8>> DoubleEndedIterator for Drain<'_, A> {
+impl<A: ByteArray> DoubleEndedIterator for Drain<'_, A> {
 	#[inline]
 	fn next_back(&mut self) -> Option<char> {
 		self.iter.next_back()
 	}
 }
 
-impl<A: Array<Item = u8>> FusedIterator for Drain<'_, A> {}
+impl<A: ByteArray> FusedIterator for Drain<'_, A> {}

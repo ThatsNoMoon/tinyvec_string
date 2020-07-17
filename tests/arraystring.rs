@@ -82,8 +82,7 @@ fn test_push_bytes() {
 
 #[test]
 fn test_push_str() {
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut s = ArrayString::from_utf8(arr).unwrap();
+	let mut s = ArrayString::<[u8; 64]>::new();
 	s.push_str("");
 	assert_eq!(&s[0..], "");
 	s.push_str("abc");
@@ -94,8 +93,7 @@ fn test_push_str() {
 
 #[test]
 fn test_add_assign() {
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut s = ArrayString::from_utf8(arr).unwrap();
+	let mut s = ArrayString::<[u8; 64]>::new();
 	s += "";
 	assert_eq!(s.as_str(), "");
 	s += "abc";
@@ -106,8 +104,7 @@ fn test_add_assign() {
 
 #[test]
 fn test_push() {
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut data = ArrayString::from_utf8(arr).unwrap();
+	let mut data = ArrayString::<[u8; 64]>::new();
 	data.push_str("ประเทศไทย中");
 	data.push('华');
 	data.push('b'); // 1 byte
@@ -119,8 +116,7 @@ fn test_push() {
 
 #[test]
 fn test_pop() {
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut data = ArrayString::from_utf8(arr).unwrap();
+	let mut data = ArrayString::<[u8; 64]>::new();
 	data.push_str("ประเทศไทย中华b¢€𤭢");
 	assert_eq!(data.pop().unwrap(), '𤭢'); // 4 bytes
 	assert_eq!(data.pop().unwrap(), '€'); // 3 bytes
@@ -220,9 +216,7 @@ fn test_str_add() {
 
 #[test]
 fn remove() {
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut s = ArrayString::from_utf8(arr).unwrap();
-	s.push_str("ศไทย中华Việt Nam; foobar");
+	let mut s = ArrayString::<[u8; 64]>::from("ศไทย中华Việt Nam; foobar");
 	assert_eq!(s.remove(0), 'ศ');
 	assert_eq!(s.len(), 33);
 	assert_eq!(s, "ไทย中华Việt Nam; foobar");
@@ -295,29 +289,22 @@ fn test_slicing() {
 
 #[test]
 fn test_from_iterator() {
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut s = ArrayString::from_utf8(arr).unwrap();
-	s.push_str("ศไทย中华Việt Nam");
+	let s = ArrayString::<[u8; 64]>::from("ศไทย中华Việt Nam");
 	let t = "ศไทย中华";
 	let u = "Việt Nam";
 
 	let a: String = s.chars().collect();
 	assert_eq!(s, a);
 
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut b = ArrayString::from_utf8(arr).unwrap();
-	b.push_str(t);
+	let mut b = ArrayString::<[u8; 64]>::from(t);
 	b.extend(u.chars());
 	assert_eq!(s, b);
 
-	let arr = ArrayVec::from_array_len([0u8; 128], 0);
-	let mut c = ArrayString::from_utf8(arr).unwrap();
+	let mut c = ArrayString::<[u8; 128]>::new();
 	c.extend(vec![t, u]);
 	assert_eq!(s, c);
 
-	let arr = ArrayVec::from_array_len([0u8; 64], 0);
-	let mut d = ArrayString::from_utf8(arr).unwrap();
-	d.push_str(t);
+	let mut d = ArrayString::<[u8; 64]>::from(t);
 	d.extend(vec![u]);
 	assert_eq!(s, d);
 }
@@ -349,10 +336,7 @@ fn test_extend_ref() {
 
 #[test]
 fn test_from_char() {
-	assert_eq!(
-		ArrayString::<[u8; 16]>::try_from('a').unwrap(),
-		'a'.to_string()
-	);
+	assert_eq!(ArrayString::<[u8; 16]>::from('a'), 'a'.to_string());
 	let s: ArrayString<[u8; 16]> = 'x'.try_into().unwrap();
 	assert_eq!(s, 'x'.to_string());
 	assert_eq!(s, ArrayString::<[u8; 4]>::from_char_infallible('x'));

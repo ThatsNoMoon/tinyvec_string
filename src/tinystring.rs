@@ -1,7 +1,10 @@
 //! [`TinyVec`](../tinyvec/enum.TinyVec.html) backed strings.
 //!
 //! Requires the `alloc` cargo feature to be enabled.
-use crate::tinyvec::{Array, TinyVec};
+use crate::{
+	bytearray::ByteArray,
+	tinyvec::{ArrayVec, TinyVec},
+};
 
 use core::{
 	convert::Infallible,
@@ -40,15 +43,23 @@ use alloc::{borrow::Cow, string::String};
 /// [`String`]: https://doc.rust-lang.org/std/string/struct.String.html
 /// [`TinyVec`]: ../tinyvec/enum.TinyVec.html
 /// [`Vec`]: https://doc.rust-lang.org/std/vec/struct.Vec.html
-#[derive(Default, Eq, PartialOrd, Ord)]
+#[derive(Eq, PartialOrd, Ord)]
 #[repr(transparent)]
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-pub struct TinyString<A: Array<Item = u8>> {
+pub struct TinyString<A: ByteArray> {
 	vec: TinyVec<A>,
 }
 
-impl<A: Array<Item = u8> + Default> TinyString<A> {
+impl<A: ByteArray> Default for TinyString<A> {
+	fn default() -> Self {
+		TinyString {
+			vec: TinyVec::from_array_len(A::DEFAULT, 0),
+		}
+	}
+}
+
+impl<A: ByteArray> TinyString<A> {
 	/// Creates a new empty `TinyString`.
 	///
 	/// This creates a new [`TinyVec`] with a backing array type `A` using its
@@ -67,9 +78,7 @@ impl<A: Array<Item = u8> + Default> TinyString<A> {
 	pub fn new() -> TinyString<A> {
 		Self::default()
 	}
-}
 
-impl<A: Array<Item = u8>> TinyString<A> {
 	/// Converts a vector of bytes to an `TinyString`.
 	///
 	/// `TinyString` is backed by `TinyVec`, so after ensuring valid UTF-8,
@@ -729,9 +738,7 @@ impl<A: Array<Item = u8>> TinyString<A> {
 	pub fn move_to_the_heap(&mut self) {
 		self.vec.move_to_the_heap();
 	}
-}
 
-impl<A: Array<Item = u8> + Default> TinyString<A> {
 	/// Splits the string into two at the given index.
 	///
 	/// Returns a new `TinyString`. `self` contains bytes `[0, at)`, and
@@ -760,12 +767,28 @@ impl<A: Array<Item = u8> + Default> TinyString<A> {
 	#[must_use = "use `.truncate()` if you don't need the other half"]
 	pub fn split_off(&mut self, at: usize) -> TinyString<A> {
 		assert!(self.is_char_boundary(at));
-		let other = self.vec.split_off(at);
+
+		// can't use `TinyVec::split_off` without a `Default` bound
+		let other = match &mut self.vec {
+			TinyVec::Inline(a) => {
+				let mut other = ArrayVec::from(A::DEFAULT);
+				let moves = &mut a[at..];
+				let split_len = moves.len();
+				let targets = &mut other[..split_len];
+				moves.swap_with_slice(targets);
+				other.set_len(split_len);
+				a.set_len(at);
+				TinyVec::Inline(other)
+			}
+
+			TinyVec::Heap(v) => TinyVec::Heap(v.split_off(at)),
+		};
+
 		unsafe { TinyString::from_utf8_unchecked(other) }
 	}
 }
 
-impl<A: Array<Item = u8>> Deref for TinyString<A> {
+impl<A: ByteArray> Deref for TinyString<A> {
 	type Target = str;
 
 	fn deref(&self) -> &str {
@@ -773,34 +796,34 @@ impl<A: Array<Item = u8>> Deref for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> DerefMut for TinyString<A> {
+impl<A: ByteArray> DerefMut for TinyString<A> {
 	fn deref_mut(&mut self) -> &mut str {
 		unsafe { str::from_utf8_unchecked_mut(&mut *self.vec) }
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Display for TinyString<A> {
+impl<A: ByteArray> fmt::Display for TinyString<A> {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Display::fmt(&**self, f)
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Debug for TinyString<A> {
+impl<A: ByteArray> fmt::Debug for TinyString<A> {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Debug::fmt(&**self, f)
 	}
 }
 
-impl<A: Array<Item = u8>> Hash for TinyString<A> {
+impl<A: ByteArray> Hash for TinyString<A> {
 	#[inline]
 	fn hash<H: Hasher>(&self, hasher: &mut H) {
 		(**self).hash(hasher)
 	}
 }
 
-impl<A: Array<Item = u8> + Clone> Clone for TinyString<A> {
+impl<A: ByteArray + Clone> Clone for TinyString<A> {
 	fn clone(&self) -> Self {
 		TinyString {
 			vec: self.vec.clone(),
@@ -812,8 +835,8 @@ impl<A: Array<Item = u8> + Clone> Clone for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8> + Default, A2: Array<Item = u8>>
-	FromIterator<TinyString<A2>> for TinyString<A>
+impl<A: ByteArray, A2: ByteArray> FromIterator<TinyString<A2>>
+	for TinyString<A>
 {
 	fn from_iter<I: IntoIterator<Item = TinyString<A2>>>(iter: I) -> Self {
 		let mut buf = Self::new();
@@ -826,7 +849,7 @@ macro_rules! impl_from_iterator {
 	($(#[$meta:meta])* $ty:ty) => {
 		$(#[$meta])*
 		#[allow(unused_lifetimes)]
-		impl<'a, A: Array<Item = u8> + Default> FromIterator<$ty>
+		impl<'a, A: ByteArray> FromIterator<$ty>
 			for TinyString<A>
 		{
 			fn from_iter<I: IntoIterator<Item = $ty>>(iter: I) -> Self {
@@ -850,20 +873,20 @@ impl_from_iterator!(&'a str);
 impl_from_iterator!(&'a char);
 impl_from_iterator!(char);
 
-impl<A: Array<Item = u8>> Extend<char> for TinyString<A> {
+impl<A: ByteArray> Extend<char> for TinyString<A> {
 	fn extend<I: IntoIterator<Item = char>>(&mut self, iter: I) {
 		let iterator = iter.into_iter();
 		iterator.for_each(move |c| self.push(c));
 	}
 }
 
-impl<'a, A: Array<Item = u8>> Extend<&'a char> for TinyString<A> {
+impl<'a, A: ByteArray> Extend<&'a char> for TinyString<A> {
 	fn extend<I: IntoIterator<Item = &'a char>>(&mut self, iter: I) {
 		self.extend(iter.into_iter().copied());
 	}
 }
 
-impl<'a, A: Array<Item = u8>> Extend<&'a str> for TinyString<A> {
+impl<'a, A: ByteArray> Extend<&'a str> for TinyString<A> {
 	fn extend<I: IntoIterator<Item = &'a str>>(&mut self, iter: I) {
 		iter.into_iter().for_each(move |s| self.push_str(s));
 	}
@@ -871,15 +894,13 @@ impl<'a, A: Array<Item = u8>> Extend<&'a str> for TinyString<A> {
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-impl<A: Array<Item = u8>> Extend<String> for TinyString<A> {
+impl<A: ByteArray> Extend<String> for TinyString<A> {
 	fn extend<I: IntoIterator<Item = String>>(&mut self, iter: I) {
 		iter.into_iter().for_each(move |s| self.push_str(&s));
 	}
 }
 
-impl<A: Array<Item = u8>, A2: Array<Item = u8>> Extend<TinyString<A2>>
-	for TinyString<A>
-{
+impl<A: ByteArray, A2: ByteArray> Extend<TinyString<A2>> for TinyString<A> {
 	fn extend<I: IntoIterator<Item = TinyString<A2>>>(&mut self, iter: I) {
 		iter.into_iter().for_each(move |s| self.push_str(&s));
 	}
@@ -887,7 +908,7 @@ impl<A: Array<Item = u8>, A2: Array<Item = u8>> Extend<TinyString<A2>>
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
 #[cfg(feature = "alloc")]
-impl<'a, A: Array<Item = u8>> Extend<Cow<'a, str>> for TinyString<A> {
+impl<'a, A: ByteArray> Extend<Cow<'a, str>> for TinyString<A> {
 	fn extend<I: IntoIterator<Item = Cow<'a, str>>>(&mut self, iter: I) {
 		iter.into_iter().for_each(move |s| self.push_str(&s));
 	}
@@ -897,7 +918,7 @@ macro_rules! impl_eq {
 	($(#[$meta:meta])* $lhs:ty, $rhs: ty) => {
 		$(#[$meta])*
 		#[allow(unused_lifetimes)]
-		impl<'a, 'b, A: Array<Item = u8>> PartialEq<$rhs> for $lhs {
+		impl<'a, 'b, A: ByteArray> PartialEq<$rhs> for $lhs {
 			#[inline]
 			fn eq(&self, other: &$rhs) -> bool {
 				PartialEq::eq(&self[..], &other[..])
@@ -910,7 +931,7 @@ macro_rules! impl_eq {
 
 		$(#[$meta])*
 		#[allow(unused_lifetimes)]
-		impl<'a, 'b, A: Array<Item = u8>> PartialEq<$lhs> for $rhs {
+		impl<'a, 'b, A: ByteArray> PartialEq<$lhs> for $rhs {
 			#[inline]
 			fn eq(&self, other: &$lhs) -> bool {
 				PartialEq::eq(&self[..], &other[..])
@@ -938,8 +959,8 @@ impl_eq! {
 
 impl<A1, A2> PartialEq<TinyString<A1>> for TinyString<A2>
 where
-	A1: Array<Item = u8>,
-	A2: Array<Item = u8>,
+	A1: ByteArray,
+	A2: ByteArray,
 {
 	#[inline]
 	fn eq(&self, other: &TinyString<A1>) -> bool {
@@ -963,7 +984,7 @@ where
 /// let c = a + b;
 /// assert_eq!(c, "Hello, World!");
 /// ```
-impl<A: Array<Item = u8> + Default> Add<&str> for TinyString<A> {
+impl<A: ByteArray> Add<&str> for TinyString<A> {
 	type Output = TinyString<A>;
 
 	#[inline]
@@ -989,14 +1010,14 @@ impl<A: Array<Item = u8> + Default> Add<&str> for TinyString<A> {
 /// ```
 ///
 /// [`push_str`]: TinyString.html#method.push_str
-impl<A: Array<Item = u8>> AddAssign<&str> for TinyString<A> {
+impl<A: ByteArray> AddAssign<&str> for TinyString<A> {
 	#[inline]
 	fn add_assign(&mut self, other: &str) {
 		self.push_str(other);
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::Range<usize>> for TinyString<A> {
+impl<A: ByteArray> ops::Index<ops::Range<usize>> for TinyString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1005,7 +1026,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::Range<usize>> for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeTo<usize>> for TinyString<A> {
+impl<A: ByteArray> ops::Index<ops::RangeTo<usize>> for TinyString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1014,7 +1035,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeTo<usize>> for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeFrom<usize>> for TinyString<A> {
+impl<A: ByteArray> ops::Index<ops::RangeFrom<usize>> for TinyString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1023,7 +1044,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeFrom<usize>> for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeFull> for TinyString<A> {
+impl<A: ByteArray> ops::Index<ops::RangeFull> for TinyString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1032,9 +1053,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeFull> for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeInclusive<usize>>
-	for TinyString<A>
-{
+impl<A: ByteArray> ops::Index<ops::RangeInclusive<usize>> for TinyString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1043,9 +1062,7 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeInclusive<usize>>
 	}
 }
 
-impl<A: Array<Item = u8>> ops::Index<ops::RangeToInclusive<usize>>
-	for TinyString<A>
-{
+impl<A: ByteArray> ops::Index<ops::RangeToInclusive<usize>> for TinyString<A> {
 	type Output = str;
 
 	#[inline]
@@ -1054,46 +1071,42 @@ impl<A: Array<Item = u8>> ops::Index<ops::RangeToInclusive<usize>>
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::Range<usize>> for TinyString<A> {
+impl<A: ByteArray> ops::IndexMut<ops::Range<usize>> for TinyString<A> {
 	#[inline]
 	fn index_mut(&mut self, index: ops::Range<usize>) -> &mut str {
 		&mut self[..][index]
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeTo<usize>> for TinyString<A> {
+impl<A: ByteArray> ops::IndexMut<ops::RangeTo<usize>> for TinyString<A> {
 	#[inline]
 	fn index_mut(&mut self, index: ops::RangeTo<usize>) -> &mut str {
 		&mut self[..][index]
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeFrom<usize>>
-	for TinyString<A>
-{
+impl<A: ByteArray> ops::IndexMut<ops::RangeFrom<usize>> for TinyString<A> {
 	#[inline]
 	fn index_mut(&mut self, index: ops::RangeFrom<usize>) -> &mut str {
 		&mut self[..][index]
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeFull> for TinyString<A> {
+impl<A: ByteArray> ops::IndexMut<ops::RangeFull> for TinyString<A> {
 	#[inline]
 	fn index_mut(&mut self, _index: ops::RangeFull) -> &mut str {
 		unsafe { str::from_utf8_unchecked_mut(&mut *self.vec) }
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeInclusive<usize>>
-	for TinyString<A>
-{
+impl<A: ByteArray> ops::IndexMut<ops::RangeInclusive<usize>> for TinyString<A> {
 	#[inline]
 	fn index_mut(&mut self, index: ops::RangeInclusive<usize>) -> &mut str {
 		IndexMut::index_mut(&mut **self, index)
 	}
 }
 
-impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeToInclusive<usize>>
+impl<A: ByteArray> ops::IndexMut<ops::RangeToInclusive<usize>>
 	for TinyString<A>
 {
 	#[inline]
@@ -1102,44 +1115,44 @@ impl<A: Array<Item = u8>> ops::IndexMut<ops::RangeToInclusive<usize>>
 	}
 }
 
-impl<A: Array<Item = u8>> AsRef<str> for TinyString<A> {
+impl<A: ByteArray> AsRef<str> for TinyString<A> {
 	#[inline]
 	fn as_ref(&self) -> &str {
 		&*self
 	}
 }
 
-impl<A: Array<Item = u8>> AsMut<str> for TinyString<A> {
+impl<A: ByteArray> AsMut<str> for TinyString<A> {
 	#[inline]
 	fn as_mut(&mut self) -> &mut str {
 		&mut *self
 	}
 }
 
-impl<A: Array<Item = u8>> AsRef<[u8]> for TinyString<A> {
+impl<A: ByteArray> AsRef<[u8]> for TinyString<A> {
 	#[inline]
 	fn as_ref(&self) -> &[u8] {
 		self.as_bytes()
 	}
 }
 
-impl<'a, A: Array<Item = u8> + Default> From<&'a str> for TinyString<A> {
+impl<'a, A: ByteArray> From<&'a str> for TinyString<A> {
 	fn from(s: &'a str) -> Self {
 		unsafe {
-			Self::from_utf8_unchecked(TinyVec::from_iter(
-				s.as_bytes().iter().copied(),
-			))
+			let mut tv = TinyVec::from_array_len(A::DEFAULT, 0);
+			tv.extend(s.as_bytes().iter().copied());
+			Self::from_utf8_unchecked(tv)
 		}
 	}
 }
 
-impl<'a, A: Array<Item = u8> + Default> From<&'a mut str> for TinyString<A> {
+impl<'a, A: ByteArray> From<&'a mut str> for TinyString<A> {
 	fn from(s: &'a mut str) -> Self {
 		Self::from(&*s)
 	}
 }
 
-impl<A: Array<Item = u8> + Default> From<char> for TinyString<A> {
+impl<A: ByteArray> From<char> for TinyString<A> {
 	fn from(c: char) -> Self {
 		let mut buf = [0u8; 4];
 		let s = c.encode_utf8(&mut buf);
@@ -1147,19 +1160,19 @@ impl<A: Array<Item = u8> + Default> From<char> for TinyString<A> {
 	}
 }
 
-impl<'a, A: Array<Item = u8> + Default> From<&'a char> for TinyString<A> {
+impl<'a, A: ByteArray> From<&'a char> for TinyString<A> {
 	fn from(c: &'a char) -> Self {
 		Self::from(*c)
 	}
 }
 
-impl<'a, A: Array<Item = u8> + Default> From<&'a String> for TinyString<A> {
+impl<'a, A: ByteArray> From<&'a String> for TinyString<A> {
 	fn from(s: &'a String) -> Self {
 		Self::from(s.as_str())
 	}
 }
 
-impl<A: Array<Item = u8> + Default> From<String> for TinyString<A> {
+impl<A: ByteArray> From<String> for TinyString<A> {
 	/// This converts the `String` into a heap-allocated `TinyVec` to avoid
 	/// unnecessary allocations.
 	fn from(s: String) -> Self {
@@ -1167,7 +1180,7 @@ impl<A: Array<Item = u8> + Default> From<String> for TinyString<A> {
 	}
 }
 
-impl<'a, A: Array<Item = u8> + Default> From<Cow<'a, str>> for TinyString<A> {
+impl<'a, A: ByteArray> From<Cow<'a, str>> for TinyString<A> {
 	/// If the `Cow` is `Owned`, then the `String` is converted into a
 	/// heap-allocated `TinyVec` to avoid unnecessary allocations. If it is
 	/// `Borrowed`, then an allocation may be made.
@@ -1179,7 +1192,7 @@ impl<'a, A: Array<Item = u8> + Default> From<Cow<'a, str>> for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8> + Default> FromStr for TinyString<A> {
+impl<A: ByteArray> FromStr for TinyString<A> {
 	type Err = Infallible;
 	#[inline]
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -1187,7 +1200,7 @@ impl<A: Array<Item = u8> + Default> FromStr for TinyString<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Write for TinyString<A> {
+impl<A: ByteArray> fmt::Write for TinyString<A> {
 	#[inline]
 	fn write_str(&mut self, s: &str) -> fmt::Result {
 		self.push_str(s);
@@ -1236,12 +1249,12 @@ impl<A: Array<Item = u8>> fmt::Write for TinyString<A> {
 /// assert_eq!(Err(tiny_vec![0, 159]), value.map_err(|e| e.into_bytes()));
 /// ```
 #[derive(Clone, PartialEq, Eq)]
-pub struct FromUtf8Error<A: Array<Item = u8>> {
+pub struct FromUtf8Error<A: ByteArray> {
 	vec: TinyVec<A>,
 	error: Utf8Error,
 }
 
-impl<A: Array<Item = u8>> FromUtf8Error<A> {
+impl<A: ByteArray> FromUtf8Error<A> {
 	/// Returns a slice of [`u8`]s bytes that were attempted to convert to an
 	/// `TinyString`.
 	///
@@ -1309,7 +1322,7 @@ impl<A: Array<Item = u8>> FromUtf8Error<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Debug for FromUtf8Error<A> {
+impl<A: ByteArray> fmt::Debug for FromUtf8Error<A> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("FromUtf8Error")
 			.field("vec", &self.vec)
@@ -1318,7 +1331,7 @@ impl<A: Array<Item = u8>> fmt::Debug for FromUtf8Error<A> {
 	}
 }
 
-impl<A: Array<Item = u8>> fmt::Display for FromUtf8Error<A> {
+impl<A: ByteArray> fmt::Display for FromUtf8Error<A> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Display::fmt(&self.error, f)
 	}
@@ -1326,7 +1339,7 @@ impl<A: Array<Item = u8>> fmt::Display for FromUtf8Error<A> {
 
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "std")))]
 #[cfg(feature = "std")]
-impl<A: Array<Item = u8>> std::error::Error for FromUtf8Error<A> {}
+impl<A: ByteArray> std::error::Error for FromUtf8Error<A> {}
 
 /// A draining iterator for [`TinyString`].
 ///
@@ -1335,7 +1348,7 @@ impl<A: Array<Item = u8>> std::error::Error for FromUtf8Error<A> {}
 ///
 /// [`drain`]: struct.TinyString.html#method.drain
 /// [`TinyString`]: struct.TinyString.html
-pub struct Drain<'a, A: Array<Item = u8>> {
+pub struct Drain<'a, A: ByteArray> {
 	/// Will be used as &'a mut TinyString in the destructor
 	string: *mut TinyString<A>,
 	/// Start of part to remove
@@ -1346,16 +1359,16 @@ pub struct Drain<'a, A: Array<Item = u8>> {
 	iter: Chars<'a>,
 }
 
-impl<A: Array<Item = u8>> fmt::Debug for Drain<'_, A> {
+impl<A: ByteArray> fmt::Debug for Drain<'_, A> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.pad("Drain { .. }")
 	}
 }
 
-unsafe impl<A: Array<Item = u8>> Send for Drain<'_, A> {}
-unsafe impl<A: Array<Item = u8>> Sync for Drain<'_, A> {}
+unsafe impl<A: ByteArray> Send for Drain<'_, A> {}
+unsafe impl<A: ByteArray> Sync for Drain<'_, A> {}
 
-impl<A: Array<Item = u8>> Drop for Drain<'_, A> {
+impl<A: ByteArray> Drop for Drain<'_, A> {
 	fn drop(&mut self) {
 		unsafe {
 			// Use TinyVec::drain. "Reaffirm" the bounds checks to avoid
@@ -1368,7 +1381,7 @@ impl<A: Array<Item = u8>> Drop for Drain<'_, A> {
 	}
 }
 
-impl<A: Array<Item = u8>> Iterator for Drain<'_, A> {
+impl<A: ByteArray> Iterator for Drain<'_, A> {
 	type Item = char;
 
 	#[inline]
@@ -1386,11 +1399,11 @@ impl<A: Array<Item = u8>> Iterator for Drain<'_, A> {
 	}
 }
 
-impl<A: Array<Item = u8>> DoubleEndedIterator for Drain<'_, A> {
+impl<A: ByteArray> DoubleEndedIterator for Drain<'_, A> {
 	#[inline]
 	fn next_back(&mut self) -> Option<char> {
 		self.iter.next_back()
 	}
 }
 
-impl<A: Array<Item = u8>> FusedIterator for Drain<'_, A> {}
+impl<A: ByteArray> FusedIterator for Drain<'_, A> {}

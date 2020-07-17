@@ -34,12 +34,7 @@ enabled.
 
 This crate strives to be as safe as possible. Almost all internal `unsafe`
 code is copied verbatim from `std`'s `String` implementation for maximum
-reliability and performance. That said, this `unsafe` code is relying on
-`tinyvec`, which is 100% safe. The implication of this is that if you
-implement `Array`, a safe trait to implement, on your own type
-incorrectly (not always returning the same slice), then you could have
-memory safety problems. Using this crate with the primitive array types
-(`[u8; N]`) will cause no problems.
+reliability and performance.
 
 ## Contributing
 
