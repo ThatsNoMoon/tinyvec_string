@@ -44,6 +44,7 @@
 //! [`std::error::Error`]: https://doc.rust-lang.org/std/error/trait.Error.html
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(docs_rs, feature(doc_cfg))]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
