@@ -41,7 +41,7 @@ reliability and performance.
 
 Feel free to open an issue if you have a problem, or open a pull request if you
 have a solution. Also feel free to reach me on [Discord](https://discord.com)
-on [the Rust Community Server](https://discord.gg/aVESxV8) @ThatsNoMoon#1075.
+on [the Rust Community Server](https://discord.gg/aVESxV8) @ThatsNoMoon#0175.
 
 ## License
 
