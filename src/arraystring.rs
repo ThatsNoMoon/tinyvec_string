@@ -783,6 +783,46 @@ impl<A: ByteArray> ArrayString<A> {
 		}
 	}
 
+	/// Removes the specified range in the string,
+	/// and replaces it with the given string.
+	/// The given string doesn't need to be the same length as the range.
+	///
+	/// # Panics
+	///
+	/// Panics if the starting point or end point do not lie on a [`char`]
+	/// boundary, or if they're out of bounds.
+	///
+	/// # Examples
+	///
+	/// Basic usage:
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let mut s = ArrayString::<[u8; 32]>::from("α is alpha, β is beta");
+	/// let beta_offset = s.find('β').unwrap_or(s.len());
+	///
+	/// // Replace the range up until the β from the string
+	/// s.replace_range(..beta_offset, "Α is capital alpha; ");
+	/// assert_eq!(s, "Α is capital alpha; β is beta");
+	/// ```
+	pub fn replace_range<R>(&mut self, range: R, replace_with: &str)
+	where
+		R: RangeBounds<usize>,
+	{
+		match range.start_bound() {
+			Bound::Included(&n) => assert!(self.is_char_boundary(n)),
+			Bound::Excluded(&n) => assert!(self.is_char_boundary(n + 1)),
+			Bound::Unbounded => {}
+		};
+		match range.end_bound() {
+			Bound::Included(&n) => assert!(self.is_char_boundary(n + 1)),
+			Bound::Excluded(&n) => assert!(self.is_char_boundary(n)),
+			Bound::Unbounded => {}
+		};
+
+		unsafe { self.as_mut_vec() }.splice(range, replace_with.bytes());
+	}
+
 	/// Splits the string into two at the given index.
 	///
 	/// Returns a new `ArrayString`. `self` contains bytes `[0, at)`, and

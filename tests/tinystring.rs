@@ -322,6 +322,57 @@ fn test_drain() {
 }
 
 #[test]
+fn test_replace_range() {
+	let mut s = TinyString::<[u8; 16]>::from("Hello, world!");
+	s.replace_range(7..12, "世界");
+	assert_eq!(s, "Hello, 世界!");
+}
+
+#[test]
+#[should_panic]
+fn test_replace_range_char_boundary() {
+	let mut s = TinyString::<[u8; 16]>::from("Hello, 世界!");
+	s.replace_range(..8, "");
+}
+
+#[test]
+fn test_replace_range_inclusive_range() {
+	let mut v = TinyString::<[u8; 8]>::from("12345");
+	v.replace_range(2..=3, "789");
+	assert_eq!(v, "127895");
+	v.replace_range(1..=2, "A");
+	assert_eq!(v, "1A895");
+}
+
+#[test]
+#[should_panic]
+fn test_replace_range_out_of_bounds() {
+	let mut s = TinyString::<[u8; 8]>::from("12345");
+	s.replace_range(5..6, "789");
+}
+
+#[test]
+#[should_panic]
+fn test_replace_range_inclusive_out_of_bounds() {
+	let mut s = TinyString::<[u8; 8]>::from("12345");
+	s.replace_range(5..=5, "789");
+}
+
+#[test]
+fn test_replace_range_empty() {
+	let mut s = TinyString::<[u8; 8]>::from("12345");
+	s.replace_range(1..2, "");
+	assert_eq!(s, "1345");
+}
+
+#[test]
+fn test_replace_range_unbounded() {
+	let mut s = TinyString::<[u8; 8]>::from("12345");
+	s.replace_range(.., "");
+	assert_eq!(s, "");
+}
+
+#[test]
 fn test_extend_ref() {
 	let mut a = TinyString::<[u8; 16]>::from("foo");
 	a.extend(&['b', 'a', 'r']);
