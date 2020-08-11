@@ -29,3 +29,7 @@ all-features = true
 [[test]]
 name = "tinystring"
 required-features = ["alloc"]
+
+[[test]]
+name = "arraystring"
+required-features = ["alloc"]
