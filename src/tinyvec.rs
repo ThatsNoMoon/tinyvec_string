@@ -1,6 +1,6 @@
 //! Re-exports from `tinyvec`.
 //!
-//! You can see `tinyvec`'s crate documentation [here](https://docs.rs/tinyvec/0.3/tinyvec/).
+//! You can see `tinyvec`'s crate documentation [here](https://docs.rs/tinyvec/0.4/tinyvec/).
 
 pub use tinyvec::{array_vec, Array, ArrayVec};
 

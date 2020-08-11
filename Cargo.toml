@@ -11,7 +11,7 @@ keywords = ["no_std", "string", "data-structures"]
 categories = ["no-std", "data-structures", "text-processing"]
 
 [dependencies]
-tinyvec = "0.3"
+tinyvec = "0.4"
 
 [features]
 
