@@ -1314,6 +1314,7 @@ impl<S> CapacityOverflowError<S> {
 	///
 	/// This could be used to retrieve a `String` that failed to convert:
 	/// ```
+	/// # #[cfg(feature = "alloc")] {
 	/// # use tinyvec_string::arraystring::{ArrayString, CapacityOverflowError};
 	/// use std::convert::TryFrom;
 	/// let heap_string = String::from("a very long string");
@@ -1324,6 +1325,7 @@ impl<S> CapacityOverflowError<S> {
 	/// let return_of_the_heap_string = err.into_inner();
 	///
 	/// assert_eq!(return_of_the_heap_string, String::from("a very long string"));
+	/// # }
 	/// ```
 	pub fn into_inner(self) -> S {
 		self.inner
