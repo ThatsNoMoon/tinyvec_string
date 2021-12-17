@@ -40,6 +40,11 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docs_rs, feature(doc_cfg))]
+// clippy recommends against tabs because of the style guide, which recommends
+// spaces in general, but spaces aren't used for source either.
+// `std::string::String` implements `PartialEq::ne` explicitly, so
+// `tinyvec_string` does as well.
+#![allow(clippy::tabs_in_doc_comments, clippy::partialeq_ne_impl)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
