@@ -1,6 +1,6 @@
 [package]
 name = "tinyvec_string"
-version = "0.2.1-beta.0"
+version = "0.3.1-beta.0"
 authors = ["ThatsNoMoon <git@thatsnomoon.dev>"]
 edition = "2018"
 description = "tinyvec based string types"
@@ -12,6 +12,7 @@ categories = ["no-std", "data-structures", "text-processing"]
 
 [dependencies]
 tinyvec = "1.5"
+serde = { version = "1", optional = true, default-features = false }
 
 [features]
 
@@ -24,6 +25,9 @@ std = ["alloc"]
 rustc_1_40 = ["tinyvec/rustc_1_40"]
 
 rustc_1_55 = ["tinyvec/rustc_1_55"]
+
+[dev-dependencies]
+serde_json = "1"
 
 [package.metadata.docs.rs]
 # Build docs with all features, show what things need a feature enabled

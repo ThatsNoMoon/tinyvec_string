@@ -1477,6 +1477,79 @@ impl<A: ByteArray> fmt::Write for ArrayString<A> {
 	}
 }
 
+#[cfg_attr(docs_rs, doc(cfg(target_feature = "serde")))]
+#[cfg(feature = "serde")]
+impl<A: ByteArray> serde::Serialize for ArrayString<A> {
+	/// Serializes the string.
+	///
+	/// # Example
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let s = ArrayString::<[u8; 5]>::from("hello");
+	/// let json = serde_json::to_string(&s);
+	/// assert!(json.is_ok());
+	/// assert_eq!(json.unwrap(), "\"hello\"");
+	/// ```
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		serializer.serialize_str(self.as_str())
+	}
+}
+
+#[cfg_attr(docs_rs, doc(cfg(target_feature = "serde")))]
+#[cfg(feature = "serde")]
+impl<'de, A: ByteArray> serde::Deserialize<'de> for ArrayString<A> {
+	/// Deserializes into an `ArrayString`.
+	///
+	/// Fails if the string to be deserialized is too long.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let src = "\"hello\"";
+	/// let parsed = serde_json::from_str::<ArrayString<[u8; 5]>>(src);
+	/// assert!(parsed.is_ok());
+	/// assert_eq!("hello", parsed.unwrap());
+	/// ```
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let src = "\"a much longer string\"";
+	/// let parsed = serde_json::from_str::<ArrayString<[u8; 5]>>(src);
+	/// assert!(parsed.is_err());
+	/// ```
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		use core::marker::PhantomData;
+
+		struct ArrayStringVisitor<A>(PhantomData<fn() -> A>);
+
+		impl<'de, A: ByteArray> serde::de::Visitor<'de> for ArrayStringVisitor<A> {
+			type Value = ArrayString<A>;
+
+			fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+				write!(f, "a string up to length {}", A::CAPACITY)
+			}
+
+			fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				ArrayString::try_from(v)
+					.map_err(|_| E::invalid_length(v.len(), &self))
+			}
+		}
+
+		deserializer.deserialize_str(ArrayStringVisitor(PhantomData))
+	}
+}
+
 /// A possible error value when converting an [`ArrayString`] from a UTF-8 byte
 /// vector.
 ///

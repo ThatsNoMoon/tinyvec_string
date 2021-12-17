@@ -1254,6 +1254,69 @@ impl<A: ByteArray> fmt::Write for TinyString<A> {
 	}
 }
 
+#[cfg_attr(docs_rs, doc(cfg(target_feature = "serde")))]
+#[cfg(feature = "serde")]
+impl<A: ByteArray> serde::Serialize for TinyString<A> {
+	/// Serializes the string.
+	///
+	/// # Example
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let s = ArrayString::<[u8; 5]>::from("hello");
+	/// let json = serde_json::to_string(&s);
+	/// assert!(json.is_ok());
+	/// assert_eq!(json.unwrap(), "\"hello\"");
+	/// ```
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		serializer.serialize_str(self.as_str())
+	}
+}
+
+#[cfg_attr(docs_rs, doc(cfg(target_feature = "serde")))]
+#[cfg(feature = "serde")]
+impl<'de, A: ByteArray> serde::Deserialize<'de> for TinyString<A> {
+	/// Deserializes into a `TinyString`.
+	///
+	/// # Example
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let src = "\"hello\"";
+	/// let parsed = serde_json::from_str::<TinyString<[u8; 5]>>(src);
+	/// assert!(parsed.is_ok());
+	/// assert_eq!("hello", parsed.unwrap());
+	/// ```
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		use core::marker::PhantomData;
+
+		struct TinyStringVisitor<A>(PhantomData<fn() -> A>);
+
+		impl<'de, A: ByteArray> serde::de::Visitor<'de> for TinyStringVisitor<A> {
+			type Value = TinyString<A>;
+
+			fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+				write!(f, "a string up to length {}", A::CAPACITY)
+			}
+
+			fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+			where
+				E: serde::de::Error,
+			{
+				Ok(TinyString::from(v))
+			}
+		}
+
+		deserializer.deserialize_str(TinyStringVisitor(PhantomData))
+	}
+}
+
 /// A possible error value when converting an [`TinyString`] from a UTF-8 byte
 /// vector.
 ///
