@@ -182,7 +182,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
+	/// let s = TinyString::<[u8; 5]>::from("hello");
 	/// let bytes = s.into_bytes();
 	///
 	/// assert_eq!(&[104, 101, 108, 108, 111][..], &bytes[..]);
@@ -203,7 +203,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+	/// let s = TinyString::<[u8; 3]>::from("foo");
 	///
 	/// assert_eq!("foo", s.as_str());
 	/// ```
@@ -219,7 +219,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 6]>::try_from("foobar").unwrap();
+	/// let mut s = TinyString::<[u8; 6]>::from("foobar");
 	/// let s_mut_str = s.as_mut_str();
 	///
 	/// s_mut_str.make_ascii_uppercase();
@@ -245,7 +245,7 @@ impl<A: ByteArray> TinyString<A> {
 		/// ```
 		/// # use tinyvec_string::TinyString;
 		/// use std::convert::TryFrom;
-		/// let s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
+		/// let s = TinyString::<[u8; 5]>::from("hello");
 		///
 		/// assert_eq!(&[104, 101, 108, 108, 111], s.as_bytes());
 		/// ```
@@ -286,14 +286,14 @@ impl<A: ByteArray> TinyString<A> {
 		/// ```
 		/// # use tinyvec_string::TinyString;
 		/// use std::convert::TryFrom;
-		/// let plain_f = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		/// let plain_f = TinyString::<[u8; 3]>::from("foo");
 		/// assert_eq!(plain_f.len(), 3);
 		///
-		/// let fancy_f = TinyString::<[u8; 4]>::try_from("ƒoo").unwrap();
+		/// let fancy_f = TinyString::<[u8; 4]>::from("ƒoo");
 		/// assert_eq!(fancy_f.len(), 4);
 		/// assert_eq!(fancy_f.chars().count(), 3);
 		///
-		/// let s = TinyString::<[u8; 16]>::try_from("hello").unwrap();
+		/// let s = TinyString::<[u8; 16]>::from("hello");
 		/// assert_eq!(s.len(), 5);
 		/// ```
 		#[inline]
@@ -451,7 +451,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 6]>::try_from("foo").unwrap();
+	/// let mut s = TinyString::<[u8; 6]>::from("foo");
 	///
 	/// s.push_str("bar");
 	///
@@ -475,7 +475,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 6]>::try_from("abc").unwrap();
+	/// let mut s = TinyString::<[u8; 6]>::from("abc");
 	///
 	/// s.push('1');
 	/// s.push('2');
@@ -514,7 +514,7 @@ impl<A: ByteArray> TinyString<A> {
 		/// ```
 		/// # use tinyvec_string::TinyString;
 		/// use std::convert::TryFrom;
-		/// let mut s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
+		/// let mut s = TinyString::<[u8; 5]>::from("hello");
 		///
 		/// s.truncate(2);
 		///
@@ -538,7 +538,7 @@ impl<A: ByteArray> TinyString<A> {
 		/// ```
 		/// # use tinyvec_string::TinyString;
 		/// use std::convert::TryFrom;
-		/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		/// let mut s = TinyString::<[u8; 3]>::from("foo");
 		///
 		/// assert_eq!(s.pop(), Some('o'));
 		/// assert_eq!(s.pop(), Some('o'));
@@ -570,7 +570,7 @@ impl<A: ByteArray> TinyString<A> {
 		/// ```
 		/// # use tinyvec_string::TinyString;
 		/// use std::convert::TryFrom;
-		/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		/// let mut s = TinyString::<[u8; 3]>::from("foo");
 		///
 		/// assert_eq!(s.remove(0), 'f');
 		/// assert_eq!(s.remove(1), 'o');
@@ -591,7 +591,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 9]>::try_from("f_o_ob_ar").unwrap();
+	/// let mut s = TinyString::<[u8; 9]>::from("f_o_ob_ar");
 	///
 	/// s.retain(|c| c != '_');
 	///
@@ -603,7 +603,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 5]>::try_from("abcde").unwrap();
+	/// let mut s = TinyString::<[u8; 5]>::from("abcde");
 	/// let keep = [false, true, true, false, true];
 	/// let mut i = 0;
 	/// s.retain(|_| (keep[i], i += 1).0);
@@ -670,7 +670,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 6]>::try_from("bar").unwrap();
+	/// let mut s = TinyString::<[u8; 6]>::from("bar");
 	///
 	/// s.insert_str(0, "foo");
 	///
@@ -698,7 +698,7 @@ impl<A: ByteArray> TinyString<A> {
 		/// ```
 		/// # use tinyvec_string::TinyString;
 		/// use std::convert::TryFrom;
-		/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		/// let mut s = TinyString::<[u8; 3]>::from("foo");
 		///
 		/// s.clear();
 		///
@@ -728,7 +728,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 23]>::try_from("α is alpha, β is beta").unwrap();
+	/// let mut s = TinyString::<[u8; 23]>::from("α is alpha, β is beta");
 	/// let beta_offset = s.find('β').unwrap_or(s.len());
 	///
 	/// // Remove the range up until the β from the string
@@ -834,7 +834,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	/// # use tinyvec_string::TinyString;
 	/// use std::convert::TryFrom;
-	/// let mut hello = TinyString::<[u8; 13]>::try_from("Hello, World!").unwrap();
+	/// let mut hello = TinyString::<[u8; 13]>::from("Hello, World!");
 	/// let world = hello.split_off(7);
 	/// assert_eq!(hello, "Hello, ");
 	/// assert_eq!(world, "World!");
@@ -1052,7 +1052,7 @@ where
 /// ```
 /// # use tinyvec_string::TinyString;
 /// use std::convert::TryFrom;
-/// let a = TinyString::<[u8; 13]>::try_from("Hello, ").unwrap();
+/// let a = TinyString::<[u8; 13]>::from("Hello, ");
 /// let b = "World!";
 /// let c = a + b;
 /// assert_eq!(c, "Hello, World!");
@@ -1076,7 +1076,7 @@ impl<A: ByteArray> Add<&str> for TinyString<A> {
 /// ```
 /// # use tinyvec_string::TinyString;
 /// use std::convert::TryFrom;
-/// let mut a = TinyString::<[u8; 13]>::try_from("Hello, ").unwrap();
+/// let mut a = TinyString::<[u8; 13]>::from("Hello, ");
 /// let b = "World!";
 /// a += b;
 /// assert_eq!(a, "Hello, World!");
