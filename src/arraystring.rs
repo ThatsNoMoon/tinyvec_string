@@ -1191,7 +1191,7 @@ impl<'a, A: ByteArray> Extend<&'a char> for ArrayString<A> {
 	/// Panics if the new length would be longer than the capacity of the backing
 	/// array.
 	fn extend<I: IntoIterator<Item = &'a char>>(&mut self, iter: I) {
-		self.extend(iter.into_iter().copied());
+		self.extend(iter.into_iter().map(|&c| c));
 	}
 }
 
