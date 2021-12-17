@@ -1781,8 +1781,8 @@ impl<'de, A: ByteArray> serde::Deserialize<'de> for ArrayString<A> {
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct FromUtf8Error<A: ByteArray> {
-	vec: ArrayVec<A>,
-	error: Utf8Error,
+	pub(crate) vec: ArrayVec<A>,
+	pub(crate) error: Utf8Error,
 }
 
 impl<A: ByteArray> FromUtf8Error<A> {

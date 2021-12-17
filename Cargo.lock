@@ -53,4 +53,5 @@ dependencies = [
  "serde",
  "serde_json",
  "tinyvec",
+ "tinyvec_macros",
 ]

@@ -12,7 +12,7 @@ See [the docs.rs documentation](https://docs.rs/tinyvec_string/)
 * `ArrayString`, a string backed by a fixed-size array on the stack,
   using `ArrayVec`
 * `TinyString`, a string backed by either a fixed-size array on the stack
-  or a `Vec` on the heap, using `TinyVec`
+  or a `Vec` on the heap
 
 ## Features
 

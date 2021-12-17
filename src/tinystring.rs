@@ -1,10 +1,7 @@
-//! [`TinyVec`](../tinyvec/enum.TinyVec.html) backed strings.
+//! Inline/Heap strings.
 //!
 //! Requires the `alloc` cargo feature to be enabled.
-use crate::{
-	bytearray::ByteArray,
-	tinyvec::{ArrayVec, TinyVec},
-};
+use crate::{arraystring::ArrayString, bytearray::ByteArray, tinyvec::TinyVec};
 
 use core::{
 	convert::Infallible,
@@ -15,22 +12,24 @@ use core::{
 		self, Add, AddAssign, Bound, Deref, DerefMut, Index, IndexMut,
 		RangeBounds,
 	},
-	ptr,
 	str::{self, Chars, FromStr, Utf8Error},
 };
 
 use alloc::{borrow::Cow, string::String};
 
+use tinyvec_macros::impl_mirrored;
+
 /// A UTF-8 encoded, fixed-capacity string.
 ///
-/// An `TinyString` is similar to [`String`], but is backed by an
-/// [`TinyVec`] instead of a [`Vec`]. This means it has similar
-/// characteristics to `TinyVec`:
-/// * An `TinyString` has a fixed capacity (in bytes), the size of the backing
-///   array.
-/// * An `TinyString` has a dynamic length; characters can be added and
-///   removed. Attempting to add characters when the capacity has been reached
-///   will cause a panic.
+/// A `TinyString` is similar to [`String`], but may be stored inline as an
+/// [`ArrayString`]. This means it has similar characteristics to `TinyVec`:
+/// * A `TinyString` has a dynamic length; characters can be added and
+///   removed.
+/// * An inline `TinyString` has a fixed capacity (in bytes), the size of the
+///   backing array.
+/// * A heap `TinyString` has a dynamic capacity.
+/// * If characters are added to an inline `TinyString` such that its new length
+///   would overflow the capacity of the backing array, it is moved to the heap.
 ///
 /// Like `String`, the contents of an `TinyString` must be valid UTF-8 at all
 /// times.
@@ -42,27 +41,23 @@ use alloc::{borrow::Cow, string::String};
 ///
 /// [`String`]: https://doc.rust-lang.org/std/string/struct.String.html
 /// [`TinyVec`]: ../tinyvec/enum.TinyVec.html
-/// [`Vec`]: https://doc.rust-lang.org/std/vec/struct.Vec.html
+/// [`ArrayString`]: ../arraystring/struct.ArrayString.html
 #[derive(Eq, PartialOrd, Ord)]
-#[repr(transparent)]
 #[cfg_attr(docs_rs, doc(cfg(target_feature = "alloc")))]
-#[cfg(feature = "alloc")]
-pub struct TinyString<A: ByteArray> {
-	vec: TinyVec<A>,
+pub enum TinyString<A: ByteArray> {
+	Inline(ArrayString<A>),
+	Heap(String),
 }
 
+/// Creates an empty inline `TinyString`.
 impl<A: ByteArray> Default for TinyString<A> {
 	fn default() -> Self {
-		TinyString {
-			vec: TinyVec::from_array_len(A::DEFAULT, 0),
-		}
+		TinyString::Inline(ArrayString::default())
 	}
 }
 
 impl<A: ByteArray> TinyString<A> {
-	/// Creates a new empty `TinyString`.
-	///
-	/// This creates a new [`TinyVec`] with a backing array of zeroes.
+	/// Creates a new empty inline `TinyString`.
 	///
 	/// # Examples
 	///
@@ -71,18 +66,12 @@ impl<A: ByteArray> TinyString<A> {
 	/// // create an `TinyString` with 16 bytes of capacity
 	/// let s = TinyString::<[u8; 16]>::new();
 	/// ```
-	///
-	/// [`TinyVec`]: ../tinyvec/enum.TinyVec.html
 	#[inline]
 	pub fn new() -> TinyString<A> {
-		Self::default()
+		TinyString::default()
 	}
 
 	/// Converts a vector of bytes to an `TinyString`.
-	///
-	/// `TinyString` is backed by `TinyVec`, so after ensuring valid UTF-8,
-	/// this function simply constructs an `TinyString` containing the
-	/// provided `TinyVec`.
 	///
 	/// The inverse of this method is [`into_bytes`].
 	///
@@ -126,9 +115,21 @@ impl<A: ByteArray> TinyString<A> {
 	pub fn from_utf8(
 		vec: TinyVec<A>,
 	) -> Result<TinyString<A>, FromUtf8Error<A>> {
-		match str::from_utf8(&vec) {
-			Ok(..) => Ok(TinyString { vec }),
-			Err(error) => Err(FromUtf8Error { vec, error }),
+		match vec {
+			TinyVec::Inline(vec) => match ArrayString::from_utf8(vec) {
+				Ok(s) => Ok(TinyString::Inline(s)),
+				Err(e) => Err(FromUtf8Error {
+					error: e.error,
+					vec: TinyVec::Inline(e.vec),
+				}),
+			},
+			TinyVec::Heap(vec) => match String::from_utf8(vec) {
+				Ok(s) => Ok(TinyString::Heap(s)),
+				Err(e) => Err(FromUtf8Error {
+					error: e.utf8_error(),
+					vec: TinyVec::Heap(e.into_bytes()),
+				}),
+			},
 		}
 	}
 
@@ -137,7 +138,7 @@ impl<A: ByteArray> TinyString<A> {
 	///
 	/// See the safe version, [`from_utf8`], for more details.
 	///
-	/// [`from_utf8`]: struct.TinyString.html#method.from_utf8
+	/// [`from_utf8`]: enum.TinyString.html#method.from_utf8
 	///
 	/// # Safety
 	///
@@ -164,10 +165,17 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	#[inline]
 	pub unsafe fn from_utf8_unchecked(vec: TinyVec<A>) -> TinyString<A> {
-		TinyString { vec }
+		match vec {
+			TinyVec::Inline(vec) => {
+				TinyString::Inline(ArrayString::from_utf8_unchecked(vec))
+			}
+			TinyVec::Heap(vec) => {
+				TinyString::Heap(String::from_utf8_unchecked(vec))
+			}
+		}
 	}
 
-	/// Returns an `TinyString`'s backing [`TinyVec`].
+	/// Returns a `TinyString`'s backing bytes as a [`TinyVec`].
 	///
 	/// # Examples
 	///
@@ -182,7 +190,10 @@ impl<A: ByteArray> TinyString<A> {
 	/// [`TinyVec`]: ../tinyvec/enum.TinyVec.html
 	#[inline]
 	pub fn into_bytes(self) -> TinyVec<A> {
-		self.vec
+		match self {
+			TinyString::Inline(s) => TinyVec::Inline(s.into_bytes()),
+			TinyString::Heap(s) => TinyVec::Heap(s.into_bytes()),
+		}
 	}
 
 	/// Extracts a string slice containing the entire `TinyString`.
@@ -220,97 +231,73 @@ impl<A: ByteArray> TinyString<A> {
 		&mut *self
 	}
 
-	/// Returns a byte slice of this `TinyString`'s contents.
-	///
-	/// The inverse of this method is [`from_utf8`].
-	///
-	/// [`from_utf8`]: #method.from_utf8
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// use std::convert::TryFrom;
-	/// let s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
-	///
-	/// assert_eq!(&[104, 101, 108, 108, 111], s.as_bytes());
-	/// ```
-	#[inline]
-	pub fn as_bytes(&self) -> &[u8] {
-		&*self.vec
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		/// Returns a byte slice of this `TinyString`'s contents.
+		///
+		/// The inverse of this method is [`from_utf8`].
+		///
+		/// [`from_utf8`]: #method.from_utf8
+		///
+		/// # Examples
+		///
+		/// ```
+		/// # use tinyvec_string::TinyString;
+		/// use std::convert::TryFrom;
+		/// let s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
+		///
+		/// assert_eq!(&[104, 101, 108, 108, 111], s.as_bytes());
+		/// ```
+		#[inline]
+		pub fn as_bytes(self: &Self) -> &[u8];
 	}
 
-	/// Returns a mutable reference to the contents of this `TinyString`.
-	///
-	/// # Safety
-	///
-	/// This function is unsafe because it does not check that the bytes passed
-	/// to it are valid UTF-8. If this constraint is violated, it may cause
-	/// memory unsafety issues with future users of the `TinyString`, as the
-	/// rest of the standard library assumes that `TinyString`s are valid
-	/// UTF-8.
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
-	///
-	/// unsafe {
-	///     let vec = s.as_mut_vec();
-	///     assert_eq!(&[104, 101, 108, 108, 111][..], &vec[..]);
-	///
-	///     vec.reverse();
-	/// }
-	/// assert_eq!(s, "olleh");
-	/// ```
-	#[inline]
-	pub unsafe fn as_mut_vec(&mut self) -> &mut TinyVec<A> {
-		&mut self.vec
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		/// Returns this `TinyString`'s capacity, in bytes.
+		///
+		/// This always returns a constant, the size of the backing array.
+		///
+		/// # Examples
+		///
+		/// ```
+		/// # use tinyvec_string::TinyString;
+		/// let s = TinyString::<[u8; 16]>::new();
+		///
+		/// assert!(s.capacity() == 16);
+		/// ```
+		#[inline]
+		pub fn capacity(self: &Self) -> usize;
 	}
 
-	/// Returns this `TinyString`'s capacity, in bytes.
-	///
-	/// This always returns a constant, the size of the backing array.
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// let s = TinyString::<[u8; 16]>::new();
-	///
-	/// assert!(s.capacity() == 16);
-	/// ```
-	#[inline]
-	pub fn capacity(&self) -> usize {
-		self.vec.capacity()
-	}
+	impl_mirrored! {
+		type Mirror = TinyString;
 
-	/// Returns the length of this `TinyString`, in bytes, not [`char`]s or
-	/// graphemes. In other words, it may not be what a human considers the
-	/// length of the string.
-	///
-	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// use std::convert::TryFrom;
-	/// let plain_f = TinyString::<[u8; 3]>::try_from("foo").unwrap();
-	/// assert_eq!(plain_f.len(), 3);
-	///
-	/// let fancy_f = TinyString::<[u8; 4]>::try_from("ƒoo").unwrap();
-	/// assert_eq!(fancy_f.len(), 4);
-	/// assert_eq!(fancy_f.chars().count(), 3);
-	///
-	/// let s = TinyString::<[u8; 16]>::try_from("hello").unwrap();
-	/// assert_eq!(s.len(), 5);
-	/// ```
-	#[inline]
-	pub fn len(&self) -> usize {
-		self.vec.len()
+		/// Returns the length of this `TinyString`, in bytes, not [`char`]s or
+		/// graphemes. In other words, it may not be what a human considers the
+		/// length of the string.
+		///
+		/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
+		///
+		/// # Examples
+		///
+		/// ```
+		/// # use tinyvec_string::TinyString;
+		/// use std::convert::TryFrom;
+		/// let plain_f = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		/// assert_eq!(plain_f.len(), 3);
+		///
+		/// let fancy_f = TinyString::<[u8; 4]>::try_from("ƒoo").unwrap();
+		/// assert_eq!(fancy_f.len(), 4);
+		/// assert_eq!(fancy_f.chars().count(), 3);
+		///
+		/// let s = TinyString::<[u8; 16]>::try_from("hello").unwrap();
+		/// assert_eq!(s.len(), 5);
+		/// ```
+		#[inline]
+		pub fn len(self: &Self) -> usize;
 	}
 
 	/// Returns `true` if this `TinyString` has a length of zero, and `false`
@@ -331,6 +318,132 @@ impl<A: ByteArray> TinyString<A> {
 		self.len() == 0
 	}
 
+	/// Ensures that this `TinyString`'s capacity is at least `additional` bytes
+	/// larger than its length.
+	///
+	/// If this `TinyString` is already in the heap, the capacity may be
+	/// increased by more than `additional` bytes if it chooses, to prevent
+	/// frequent reallocations.
+	///
+	/// If you do not want this "at least" behavior, see the [`reserve_exact`]
+	/// method.
+	///
+	/// # Panics
+	///
+	/// Panics if the new capacity overflows [`usize`].
+	///
+	/// [`reserve_exact`]: #method.reserve_exact
+	///
+	/// # Examples
+	///
+	/// Basic usage:
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 5]>::new();
+	///
+	/// s.reserve(10);
+	///
+	/// assert!(s.capacity() >= 10);
+	/// ```
+	///
+	/// This might not actually increase the capacity:
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 10]>::new();
+	/// s.push('a');
+	/// s.push('b');
+	///
+	/// // s now has a length of 2 and a capacity of 10
+	/// assert_eq!(2, s.len());
+	/// assert_eq!(10, s.capacity());
+	///
+	/// // Since we already have an extra 8 capacity, calling this...
+	/// s.reserve(8);
+	///
+	/// // ... doesn't actually increase.
+	/// assert_eq!(10, s.capacity());
+	/// ```
+	#[inline]
+	pub fn reserve(&mut self, additional: usize) {
+		match self {
+			TinyString::Inline(s) => {
+				if s.len() + additional > s.capacity() {
+					let mut heap = String::with_capacity(s.len() + additional);
+					heap.push_str(s.as_str());
+					*self = TinyString::Heap(heap);
+				}
+			}
+			TinyString::Heap(s) => s.reserve(additional),
+		}
+	}
+
+	/// Ensures that this `TinyString`'s capacity is `additional` bytes
+	/// larger than its length.
+	///
+	/// Consider using the [`reserve`] method unless you absolutely know
+	/// better than the allocator.
+	///
+	/// This has no effect if the `TinyString` is inline and the new capacity
+	/// would be less than or equal to the capacity of the backing array, even
+	/// if it is not exact.
+	///
+	/// [`reserve`]: #method.reserve
+	///
+	/// # Panics
+	///
+	/// Panics if the new capacity overflows `usize`.
+	///
+	/// # Examples
+	///
+	/// Basic usage:
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 5]>::new();
+	///
+	/// s.reserve_exact(10);
+	///
+	/// assert!(s.capacity() >= 10);
+	///
+	/// s.reserve_exact(20);
+	///
+	/// assert!(s.capacity() >= 20);
+	/// ```
+	///
+	/// This might not actually increase the capacity:
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 10]>::new();
+	/// s.push('a');
+	/// s.push('b');
+	///
+	/// // s now has a length of 2 and a capacity of 10
+	/// assert_eq!(2, s.len());
+	/// assert_eq!(10, s.capacity());
+	///
+	/// // Since we already have an extra 8 capacity, calling this...
+	/// s.reserve_exact(8);
+	///
+	/// // ... doesn't actually increase.
+	/// assert_eq!(10, s.capacity());
+	/// ```
+	#[inline]
+	pub fn reserve_exact(&mut self, additional: usize) {
+		match self {
+			TinyString::Inline(s) => {
+				if s.len() + additional > s.capacity() {
+					let mut heap = String::with_capacity(s.len() + additional);
+					heap.push_str(s.as_str());
+					*self = TinyString::Heap(heap);
+				}
+			}
+			TinyString::Heap(s) => s.reserve_exact(additional),
+		}
+	}
+
 	/// Appends a given string slice onto the end of this `TinyString`.
 	///
 	/// # Examples
@@ -346,10 +459,22 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	#[inline]
 	pub fn push_str(&mut self, string: &str) {
-		self.vec.extend_from_slice(string.as_bytes())
+		match self {
+			TinyString::Inline(s) => match s.try_push_str(string) {
+				Ok(()) => (),
+				Err(_) => {
+					let mut heap =
+						String::with_capacity(s.len() + string.len());
+					heap.push_str(s.as_str());
+					heap.push_str(string);
+					*self = TinyString::Heap(heap);
+				}
+			},
+			TinyString::Heap(s) => s.push_str(string),
+		}
 	}
 
-	/// Appends the given [`char`] to the end of this `String`.
+	/// Appends the given [`char`] to the end of this `TinyString`.
 	///
 	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
 	///
@@ -368,122 +493,107 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	#[inline]
 	pub fn push(&mut self, ch: char) {
-		match ch.len_utf8() {
-			1 => self.vec.push(ch as u8),
-			_ => self
-				.vec
-				.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+		match self {
+			TinyString::Inline(s) => match s.try_push(ch) {
+				Ok(()) => (),
+				Err(_) => {
+					let mut heap =
+						String::with_capacity(s.len() + ch.len_utf8());
+					heap.push_str(s.as_str());
+					heap.push(ch);
+					*self = TinyString::Heap(heap);
+				}
+			},
+			TinyString::Heap(s) => s.push(ch),
 		}
 	}
 
-	/// Shortens this `TinyString` to the specified length.
-	///
-	/// If `new_len` is greater than the string's current length, this has no
-	/// effect.
-	///
-	/// Note that this method has no effect on the maximum capacity
-	/// of the string
-	///
-	/// # Panics
-	///
-	/// Panics if `new_len` does not lie on a [`char`] boundary.
-	///
-	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
-	///
-	/// s.truncate(2);
-	///
-	/// assert_eq!("he", s);
-	/// ```
-	#[inline]
-	pub fn truncate(&mut self, new_len: usize) {
-		if new_len <= self.len() {
-			assert!(self.is_char_boundary(new_len));
-			self.vec.truncate(new_len)
-		}
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		/// Shortens this `TinyString` to the specified length.
+		///
+		/// If `new_len` is greater than the string's current length, this has no
+		/// effect.
+		///
+		/// Note that this method has no effect on the maximum capacity
+		/// of the string
+		///
+		/// # Panics
+		///
+		/// Panics if `new_len` does not lie on a [`char`] boundary.
+		///
+		/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
+		///
+		/// # Examples
+		///
+		/// ```
+		/// # use tinyvec_string::TinyString;
+		/// use std::convert::TryFrom;
+		/// let mut s = TinyString::<[u8; 5]>::try_from("hello").unwrap();
+		///
+		/// s.truncate(2);
+		///
+		/// assert_eq!("he", s);
+		/// ```
+		#[inline]
+		pub fn truncate(self: &mut Self, new_len: usize);
 	}
 
-	/// Removes the last character from the string buffer and returns it.
-	///
-	/// Returns [`None`] if this `String` is empty.
-	///
-	/// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html#variant.None
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
-	///
-	/// assert_eq!(s.pop(), Some('o'));
-	/// assert_eq!(s.pop(), Some('o'));
-	/// assert_eq!(s.pop(), Some('f'));
-	///
-	/// assert_eq!(s.pop(), None);
-	/// ```
-	#[inline]
-	pub fn pop(&mut self) -> Option<char> {
-		let ch = self.chars().rev().next()?;
-		let newlen = self.len() - ch.len_utf8();
-		match &mut self.vec {
-			TinyVec::Inline(v) => v.set_len(newlen),
-			TinyVec::Heap(v) => unsafe { v.set_len(newlen) },
-		}
-		Some(ch)
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		/// Removes the last character from the string buffer and returns it.
+		///
+		/// Returns [`None`] if this `String` is empty.
+		///
+		/// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html#variant.None
+		///
+		/// # Examples
+		///
+		/// ```
+		/// # use tinyvec_string::TinyString;
+		/// use std::convert::TryFrom;
+		/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		///
+		/// assert_eq!(s.pop(), Some('o'));
+		/// assert_eq!(s.pop(), Some('o'));
+		/// assert_eq!(s.pop(), Some('f'));
+		///
+		/// assert_eq!(s.pop(), None);
+		/// ```
+		#[inline]
+		pub fn pop(self: &mut Self) -> Option<char>;
 	}
 
-	/// Removes a [`char`] from this `String` at a byte position and returns it.
-	///
-	/// This is an `O(n)` operation, as it requires copying every element in the
-	/// buffer.
-	///
-	/// # Panics
-	///
-	/// Panics if `idx` is larger than or equal to the `TinyString`'s length,
-	/// or if it does not lie on a [`char`] boundary.
-	///
-	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
-	///
-	/// assert_eq!(s.remove(0), 'f');
-	/// assert_eq!(s.remove(1), 'o');
-	/// assert_eq!(s.remove(0), 'o');
-	/// ```
-	#[inline]
-	pub fn remove(&mut self, idx: usize) -> char {
-		let ch = match self[idx..].chars().next() {
-			Some(ch) => ch,
-			None => panic!("cannot remove a char from the end of a string"),
-		};
+	impl_mirrored! {
+		type Mirror = TinyString;
 
-		let next = idx + ch.len_utf8();
-		let len = self.len();
-		unsafe {
-			ptr::copy(
-				self.vec.as_ptr().add(next),
-				self.vec.as_mut_ptr().add(idx),
-				len - next,
-			);
-			let newlen = len - (next - idx);
-			match &mut self.vec {
-				TinyVec::Inline(v) => v.set_len(newlen),
-				TinyVec::Heap(v) => v.set_len(newlen),
-			}
-		}
-		ch
+		/// Removes a [`char`] from this `String` at a byte position and returns it.
+		///
+		/// This is an `O(n)` operation, as it requires copying every element in the
+		/// buffer.
+		///
+		/// # Panics
+		///
+		/// Panics if `idx` is larger than or equal to the `TinyString`'s length,
+		/// or if it does not lie on a [`char`] boundary.
+		///
+		/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
+		///
+		/// # Examples
+		///
+		/// ```
+		/// # use tinyvec_string::TinyString;
+		/// use std::convert::TryFrom;
+		/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		///
+		/// assert_eq!(s.remove(0), 'f');
+		/// assert_eq!(s.remove(1), 'o');
+		/// assert_eq!(s.remove(0), 'o');
+		/// ```
+		#[inline]
+		pub fn remove(self: &mut Self, idx: usize) -> char;
 	}
 
 	/// Retains only the characters specified by the predicate.
@@ -516,41 +626,13 @@ impl<A: ByteArray> TinyString<A> {
 	/// assert_eq!(s, "bce");
 	/// ```
 	#[inline]
-	pub fn retain<F>(&mut self, mut f: F)
+	pub fn retain<F>(&mut self, f: F)
 	where
 		F: FnMut(char) -> bool,
 	{
-		let len = self.len();
-		let mut del_bytes = 0;
-		let mut idx = 0;
-
-		while idx < len {
-			let ch =
-				unsafe { self.get_unchecked(idx..len).chars().next().unwrap() };
-			let ch_len = ch.len_utf8();
-
-			if !f(ch) {
-				del_bytes += ch_len;
-			} else if del_bytes > 0 {
-				unsafe {
-					ptr::copy(
-						self.vec.as_ptr().add(idx),
-						self.vec.as_mut_ptr().add(idx - del_bytes),
-						ch_len,
-					);
-				}
-			}
-
-			// Point idx to the next char
-			idx += ch_len;
-		}
-
-		if del_bytes > 0 {
-			let newlen = len - del_bytes;
-			match &mut self.vec {
-				TinyVec::Inline(v) => v.set_len(newlen),
-				TinyVec::Heap(v) => unsafe { v.set_len(newlen) },
-			}
+		match self {
+			TinyString::Inline(s) => s.retain(f),
+			TinyString::Heap(s) => s.retain(f),
 		}
 	}
 
@@ -579,13 +661,20 @@ impl<A: ByteArray> TinyString<A> {
 	/// assert_eq!("foo", s);
 	/// ```
 	#[inline]
-	pub fn insert(&mut self, idx: usize, ch: char) {
-		assert!(self.is_char_boundary(idx));
-		let mut bits = [0; 4];
-		let bits = ch.encode_utf8(&mut bits).as_bytes();
-
-		unsafe {
-			self.insert_bytes(idx, bits);
+	pub fn insert(self: &mut Self, idx: usize, ch: char) {
+		match self {
+			TinyString::Inline(s) => match s.try_insert(idx, ch) {
+				Ok(()) => (),
+				Err(_) => {
+					let mut heap =
+						String::with_capacity(s.len() + ch.len_utf8());
+					heap.push_str(&s[..idx]);
+					heap.push(ch);
+					heap.push_str(&s[idx..]);
+					*self = TinyString::Heap(heap);
+				}
+			},
+			TinyString::Heap(s) => s.insert(idx, ch),
 		}
 	}
 
@@ -613,64 +702,46 @@ impl<A: ByteArray> TinyString<A> {
 	/// assert_eq!("foobar", s);
 	/// ```
 	#[inline]
-	pub fn insert_str(&mut self, idx: usize, string: &str) {
-		assert!(self.is_char_boundary(idx));
-
-		unsafe {
-			self.insert_bytes(idx, string.as_bytes());
-		}
-	}
-
-	unsafe fn insert_bytes(&mut self, idx: usize, bytes: &[u8]) {
-		let len = self.len();
-		let amt = bytes.len();
-		match &mut self.vec {
-			TinyVec::Inline(v) => {
-				if v.capacity() < len + amt {
-					self.vec.move_to_the_heap();
-					match &mut self.vec {
-						TinyVec::Heap(v) => v.reserve(amt),
-						_ => unreachable!(),
-					}
+	pub fn insert_str(self: &mut Self, idx: usize, string: &str) {
+		match self {
+			TinyString::Inline(s) => match s.try_insert_str(idx, string) {
+				Ok(()) => (),
+				Err(_) => {
+					let mut heap =
+						String::with_capacity(s.len() + string.len());
+					heap.push_str(&s[..idx]);
+					heap.push_str(string);
+					heap.push_str(&s[idx..]);
+					*self = TinyString::Heap(heap);
 				}
-			}
-			TinyVec::Heap(v) => v.reserve(amt),
-		}
-
-		ptr::copy(
-			self.vec.as_ptr().add(idx),
-			self.vec.as_mut_ptr().add(idx + amt),
-			len - idx,
-		);
-		ptr::copy(bytes.as_ptr(), self.vec.as_mut_ptr().add(idx), amt);
-		let newlen = len + amt;
-		match &mut self.vec {
-			TinyVec::Inline(v) => v.set_len(newlen),
-			TinyVec::Heap(v) => v.set_len(newlen),
+			},
+			TinyString::Heap(s) => s.insert_str(idx, string),
 		}
 	}
 
-	/// Truncates this `TinyString`, removing all contents.
-	///
-	/// While this means the `TinyString` will have a length of zero, it does
-	/// not modify its capacity.
-	///
-	/// # Examples
-	///
-	/// ```
-	/// # use tinyvec_string::TinyString;
-	/// use std::convert::TryFrom;
-	/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
-	///
-	/// s.clear();
-	///
-	/// assert!(s.is_empty());
-	/// assert_eq!(0, s.len());
-	/// assert_eq!(3, s.capacity());
-	/// ```
-	#[inline]
-	pub fn clear(&mut self) {
-		self.vec.clear()
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		/// Truncates this `TinyString`, removing all contents.
+		///
+		/// While this means the `TinyString` will have a length of zero, it does
+		/// not modify its capacity.
+		///
+		/// # Examples
+		///
+		/// ```
+		/// # use tinyvec_string::TinyString;
+		/// use std::convert::TryFrom;
+		/// let mut s = TinyString::<[u8; 3]>::try_from("foo").unwrap();
+		///
+		/// s.clear();
+		///
+		/// assert!(s.is_empty());
+		/// assert_eq!(0, s.len());
+		/// assert_eq!(3, s.capacity());
+		/// ```
+		#[inline]
+		pub fn clear(self: &mut Self);
 	}
 
 	/// Creates a draining iterator that removes the specified range in the
@@ -735,8 +806,14 @@ impl<A: ByteArray> TinyString<A> {
 		}
 	}
 
+	#[inline]
 	pub fn move_to_the_heap(&mut self) {
-		self.vec.move_to_the_heap();
+		match self {
+			TinyString::Inline(s) => {
+				*self = TinyString::Heap(String::from(s.as_str()))
+			}
+			TinyString::Heap(_) => (),
+		}
 	}
 
 	/// Removes the specified range in the string,
@@ -761,22 +838,15 @@ impl<A: ByteArray> TinyString<A> {
 	/// s.replace_range(..beta_offset, "Α is capital alpha; ");
 	/// assert_eq!(s, "Α is capital alpha; β is beta");
 	/// ```
+	#[inline]
 	pub fn replace_range<R>(&mut self, range: R, replace_with: &str)
 	where
 		R: RangeBounds<usize>,
 	{
-		match range.start_bound() {
-			Bound::Included(&n) => assert!(self.is_char_boundary(n)),
-			Bound::Excluded(&n) => assert!(self.is_char_boundary(n + 1)),
-			Bound::Unbounded => {}
-		};
-		match range.end_bound() {
-			Bound::Included(&n) => assert!(self.is_char_boundary(n + 1)),
-			Bound::Excluded(&n) => assert!(self.is_char_boundary(n)),
-			Bound::Unbounded => {}
-		};
-
-		unsafe { self.as_mut_vec() }.splice(range, replace_with.bytes());
+		match self {
+			TinyString::Inline(s) => s.replace_range(range, replace_with),
+			TinyString::Heap(s) => s.replace_range(range, replace_with),
+		}
 	}
 
 	/// Splits the string into two at the given index.
@@ -806,39 +876,30 @@ impl<A: ByteArray> TinyString<A> {
 	#[inline]
 	#[must_use = "use `.truncate()` if you don't need the other half"]
 	pub fn split_off(&mut self, at: usize) -> TinyString<A> {
-		assert!(self.is_char_boundary(at));
-
-		// can't use `TinyVec::split_off` without a `Default` bound
-		let other = match &mut self.vec {
-			TinyVec::Inline(a) => {
-				let mut other = ArrayVec::from(A::DEFAULT);
-				let moves = &mut a[at..];
-				let split_len = moves.len();
-				let targets = &mut other[..split_len];
-				moves.swap_with_slice(targets);
-				other.set_len(split_len);
-				a.set_len(at);
-				TinyVec::Inline(other)
-			}
-
-			TinyVec::Heap(v) => TinyVec::Heap(v.split_off(at)),
-		};
-
-		unsafe { TinyString::from_utf8_unchecked(other) }
+		match self {
+			TinyString::Inline(s) => TinyString::Inline(s.split_off(at)),
+			TinyString::Heap(s) => TinyString::Heap(s.split_off(at)),
+		}
 	}
 }
 
 impl<A: ByteArray> Deref for TinyString<A> {
 	type Target = str;
 
-	fn deref(&self) -> &str {
-		unsafe { str::from_utf8_unchecked(&*self.vec) }
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		#[inline]
+		fn deref(self: &Self) -> &str;
 	}
 }
 
 impl<A: ByteArray> DerefMut for TinyString<A> {
-	fn deref_mut(&mut self) -> &mut str {
-		unsafe { str::from_utf8_unchecked_mut(&mut *self.vec) }
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		#[inline]
+		fn deref_mut(self: &mut Self) -> &mut str;
 	}
 }
 
@@ -864,14 +925,20 @@ impl<A: ByteArray> Hash for TinyString<A> {
 }
 
 impl<A: ByteArray + Clone> Clone for TinyString<A> {
+	#[inline]
 	fn clone(&self) -> Self {
-		TinyString {
-			vec: self.vec.clone(),
+		match self {
+			TinyString::Inline(s) => TinyString::Inline(s.clone()),
+			TinyString::Heap(s) => TinyString::Heap(s.clone()),
 		}
 	}
 
+	#[inline]
 	fn clone_from(&mut self, source: &Self) {
-		self.vec.clone_from(&source.vec);
+		match source {
+			TinyString::Inline(s) => *self = TinyString::Inline(s.clone()),
+			TinyString::Heap(s) => *self = TinyString::Heap(s.clone()),
+		}
 	}
 }
 
@@ -879,7 +946,7 @@ impl<A: ByteArray, A2: ByteArray> FromIterator<TinyString<A2>>
 	for TinyString<A>
 {
 	fn from_iter<I: IntoIterator<Item = TinyString<A2>>>(iter: I) -> Self {
-		let mut buf = Self::new();
+		let mut buf = TinyString::new();
 		buf.extend(iter);
 		buf
 	}
@@ -893,7 +960,7 @@ macro_rules! impl_from_iterator {
 			for TinyString<A>
 		{
 			fn from_iter<I: IntoIterator<Item = $ty>>(iter: I) -> Self {
-				let mut buf = Self::new();
+				let mut buf = TinyString::new();
 				buf.extend(iter);
 				buf
 			}
@@ -1087,9 +1154,11 @@ impl<A: ByteArray> ops::Index<ops::RangeFrom<usize>> for TinyString<A> {
 impl<A: ByteArray> ops::Index<ops::RangeFull> for TinyString<A> {
 	type Output = str;
 
-	#[inline]
-	fn index(&self, _index: ops::RangeFull) -> &str {
-		unsafe { str::from_utf8_unchecked(&self.vec) }
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		#[inline]
+		fn index(self: &Self, index: ops::RangeFull) -> &str;
 	}
 }
 
@@ -1133,9 +1202,11 @@ impl<A: ByteArray> ops::IndexMut<ops::RangeFrom<usize>> for TinyString<A> {
 }
 
 impl<A: ByteArray> ops::IndexMut<ops::RangeFull> for TinyString<A> {
-	#[inline]
-	fn index_mut(&mut self, _index: ops::RangeFull) -> &mut str {
-		unsafe { str::from_utf8_unchecked_mut(&mut *self.vec) }
+	impl_mirrored! {
+		type Mirror = TinyString;
+
+		#[inline]
+		fn index_mut(self: &mut Self, index: ops::RangeFull) -> &mut str;
 	}
 }
 
@@ -1181,14 +1252,14 @@ impl<'a, A: ByteArray> From<&'a str> for TinyString<A> {
 		unsafe {
 			let mut tv = TinyVec::from_array_len(A::DEFAULT, 0);
 			tv.extend(s.as_bytes().iter().copied());
-			Self::from_utf8_unchecked(tv)
+			TinyString::from_utf8_unchecked(tv)
 		}
 	}
 }
 
 impl<'a, A: ByteArray> From<&'a mut str> for TinyString<A> {
 	fn from(s: &'a mut str) -> Self {
-		Self::from(&*s)
+		TinyString::from(&*s)
 	}
 }
 
@@ -1196,19 +1267,19 @@ impl<A: ByteArray> From<char> for TinyString<A> {
 	fn from(c: char) -> Self {
 		let mut buf = [0u8; 4];
 		let s = c.encode_utf8(&mut buf);
-		Self::from(s)
+		TinyString::from(s)
 	}
 }
 
 impl<'a, A: ByteArray> From<&'a char> for TinyString<A> {
 	fn from(c: &'a char) -> Self {
-		Self::from(*c)
+		TinyString::from(*c)
 	}
 }
 
 impl<'a, A: ByteArray> From<&'a String> for TinyString<A> {
 	fn from(s: &'a String) -> Self {
-		Self::from(s.as_str())
+		TinyString::from(s.as_str())
 	}
 }
 
@@ -1216,7 +1287,9 @@ impl<A: ByteArray> From<String> for TinyString<A> {
 	/// This converts the `String` into a heap-allocated `TinyVec` to avoid
 	/// unnecessary allocations.
 	fn from(s: String) -> Self {
-		unsafe { Self::from_utf8_unchecked(TinyVec::Heap(s.into_bytes())) }
+		unsafe {
+			TinyString::from_utf8_unchecked(TinyVec::Heap(s.into_bytes()))
+		}
 	}
 }
 
@@ -1226,8 +1299,8 @@ impl<'a, A: ByteArray> From<Cow<'a, str>> for TinyString<A> {
 	/// `Borrowed`, then an allocation may be made.
 	fn from(s: Cow<'a, str>) -> Self {
 		match s {
-			Cow::Borrowed(s) => Self::from(s),
-			Cow::Owned(s) => Self::from(s),
+			Cow::Borrowed(s) => TinyString::from(s),
+			Cow::Owned(s) => TinyString::from(s),
 		}
 	}
 }
@@ -1236,7 +1309,7 @@ impl<A: ByteArray> FromStr for TinyString<A> {
 	type Err = Infallible;
 	#[inline]
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		Ok(Self::from(s))
+		Ok(TinyString::from(s))
 	}
 }
 
@@ -1324,8 +1397,8 @@ impl<'de, A: ByteArray> serde::Deserialize<'de> for TinyString<A> {
 /// The [`into_bytes`] method will give back the byte vector that was used in
 /// the conversion attempt.
 ///
-/// [`from_utf8`]: struct.TinyString.html#method.from_utf8
-/// [`TinyString`]: struct.TinyString.html
+/// [`from_utf8`]: enum.TinyString.html#method.from_utf8
+/// [`TinyString`]: enum.TinyString.html
 /// [`into_bytes`]: struct.FromUtf8Error.html#method.into_bytes
 ///
 /// The [`Utf8Error`] type provided by [`std::str`] represents an error that may
@@ -1449,8 +1522,8 @@ impl<A: ByteArray> std::error::Error for FromUtf8Error<A> {}
 /// This struct is created by the [`drain`] method on [`TinyString`]. See its
 /// documentation for more.
 ///
-/// [`drain`]: struct.TinyString.html#method.drain
-/// [`TinyString`]: struct.TinyString.html
+/// [`drain`]: enum.TinyString.html#method.drain
+/// [`TinyString`]: enum.TinyString.html
 pub struct Drain<'a, A: ByteArray> {
 	/// Will be used as &'a mut TinyString in the destructor
 	string: *mut TinyString<A>,
@@ -1474,11 +1547,22 @@ unsafe impl<A: ByteArray> Sync for Drain<'_, A> {}
 impl<A: ByteArray> Drop for Drain<'_, A> {
 	fn drop(&mut self) {
 		unsafe {
-			// Use TinyVec::drain. "Reaffirm" the bounds checks to avoid
+			// Use backing drain. "Reaffirm" the bounds checks to avoid
 			// panic code being inserted again.
-			let self_vec = (*self.string).as_mut_vec();
-			if self.start <= self.end && self.end <= self_vec.len() {
-				self_vec.drain(self.start..self.end);
+			let this = &mut *self.string;
+			match this {
+				TinyString::Inline(s) => {
+					let this_vec = s.as_mut_vec();
+					if self.start <= self.end && self.end <= this_vec.len() {
+						drop(this_vec.drain(self.start..self.end))
+					}
+				}
+				TinyString::Heap(s) => {
+					let this_vec = s.as_mut_vec();
+					if self.start <= self.end && self.end <= this_vec.len() {
+						drop(this_vec.drain(self.start..self.end))
+					}
+				}
 			}
 		}
 	}

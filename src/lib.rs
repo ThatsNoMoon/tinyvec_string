@@ -31,7 +31,7 @@
 //!
 //! [`tinyvec`]: tinyvec/index.html
 //! [`ArrayString`]: arraystring/struct.ArrayString.html
-//! [`TinyString`]: tinystring/struct.TinyString.html
+//! [`TinyString`]: tinystring/enum.TinyString.html
 //! [`ArrayVec`]: tinyvec/struct.ArrayVec.html
 //! [`TinyVec`]: tinyvec/enum.TinyVec.html
 //! [`Array`]: tinyvec/trait.Array.html
@@ -44,7 +44,12 @@
 // spaces in general, but spaces aren't used for source either.
 // `std::string::String` implements `PartialEq::ne` explicitly, so
 // `tinyvec_string` does as well.
-#![allow(clippy::tabs_in_doc_comments, clippy::partialeq_ne_impl)]
+// `copied`/`cloned` can't be used to support Rust 1.34.
+#![allow(
+	clippy::tabs_in_doc_comments,
+	clippy::partialeq_ne_impl,
+	clippy::map_clone
+)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
