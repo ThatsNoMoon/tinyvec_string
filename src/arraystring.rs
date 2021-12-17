@@ -417,7 +417,43 @@ impl<A: ByteArray> ArrayString<A> {
 		self.vec.extend_from_slice(string.as_bytes())
 	}
 
-	/// Appends the given [`char`] to the end of this `String`.
+	/// Attempts to append a given string slice onto the end of this
+	/// `ArrayString`.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the new length would be longer than the capacity of
+	/// the backing array.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let mut s = ArrayString::<[u8; 6]>::from("foo");
+	///
+	/// s.try_push_str("bar").unwrap();
+	///
+	/// assert_eq!("foobar", s);
+	///
+	/// assert!(s.try_push_str("hello").is_err());
+	/// ```
+	#[inline]
+	pub fn try_push_str<'other>(
+		&mut self,
+		string: &'other str,
+	) -> Result<(), CapacityOverflowError<&'other str>> {
+		if self.len() + string.len() > self.capacity() {
+			Err(CapacityOverflowError {
+				overflow_amount: self.len() + string.len() - self.capacity(),
+				inner: string,
+			})
+		} else {
+			self.vec.extend_from_slice(string.as_bytes());
+			Ok(())
+		}
+	}
+
+	/// Appends the given [`char`] to the end of this `ArrayString`.
 	///
 	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
 	///
@@ -445,6 +481,51 @@ impl<A: ByteArray> ArrayString<A> {
 			_ => self
 				.vec
 				.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+		}
+	}
+
+	/// Attempts to append the given [`char`] to the end of this `ArrayString`.
+	///
+	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
+	///
+	/// # Errors
+	///
+	/// Returns an error if the new length would be longer than the capacity of
+	/// the backing array.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let mut s = ArrayString::<[u8; 6]>::from("abc");
+	///
+	/// s.try_push('1').unwrap();
+	/// s.try_push('2').unwrap();
+	/// s.try_push('3').unwrap();
+	///
+	/// assert_eq!("abc123", s);
+	///
+	/// assert!(s.try_push('f').is_err());
+	/// ```
+	#[inline]
+	pub fn try_push(
+		&mut self,
+		ch: char,
+	) -> Result<(), CapacityOverflowError<char>> {
+		if self.len() + ch.len_utf8() > self.capacity() {
+			Err(CapacityOverflowError {
+				overflow_amount: self.len() + ch.len_utf8() - self.capacity(),
+				inner: ch,
+			})
+		} else {
+			match ch.len_utf8() {
+				1 => self.vec.push(ch as u8),
+				_ => self
+					.vec
+					.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes()),
+			}
+
+			Ok(())
 		}
 	}
 
@@ -617,8 +698,8 @@ impl<A: ByteArray> ArrayString<A> {
 	///
 	/// # Panics
 	///
-	/// Panics if `idx` is larger than the `ArrayString`'s length, or if it does not
-	/// lie on a [`char`] boundary.
+	/// Panics if `idx` is larger than the `ArrayString`'s length, or if it does
+	/// not lie on a [`char`] boundary.
 	///
 	/// Panics if the new length would be longer than the capacity of the
 	/// backing array.
@@ -643,8 +724,69 @@ impl<A: ByteArray> ArrayString<A> {
 		let mut bits = [0; 4];
 		let bits = ch.encode_utf8(&mut bits).as_bytes();
 
+		assert!(
+			self.len() + bits.len() <= self.capacity(),
+			"ArrayString::insert: capacity overflow"
+		);
+
 		unsafe {
 			self.insert_bytes(idx, bits);
+		}
+	}
+
+	/// Attempts to insert a character into this `ArrayString` at a byte
+	/// position.
+	///
+	/// This is an `O(n)` operation as it requires copying every element in the
+	/// buffer.
+	///
+	/// # Panics
+	///
+	/// Panics if `idx` is larger than the `ArrayString`'s length, or if it does
+	/// not lie on a [`char`] boundary.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the new length would be longer than the capacity of
+	/// the backing array.
+	///
+	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let mut s = ArrayString::<[u8; 3]>::new();
+	///
+	/// s.try_insert(0, 'f').unwrap();
+	/// s.try_insert(1, 'o').unwrap();
+	/// s.try_insert(2, 'o').unwrap();
+	///
+	/// assert_eq!("foo", s);
+	///
+	/// assert!(s.try_insert(0, 'b').is_err());
+	/// ```
+	#[inline]
+	pub fn try_insert(
+		&mut self,
+		idx: usize,
+		ch: char,
+	) -> Result<(), CapacityOverflowError<char>> {
+		assert!(self.is_char_boundary(idx));
+		let mut bits = [0; 4];
+		let bits = ch.encode_utf8(&mut bits).as_bytes();
+
+		if self.len() + bits.len() > self.capacity() {
+			Err(CapacityOverflowError {
+				overflow_amount: self.len() + bits.len() - self.capacity(),
+				inner: ch,
+			})
+		} else {
+			unsafe {
+				self.insert_bytes(idx, bits);
+			}
+
+			Ok(())
 		}
 	}
 
@@ -677,19 +819,74 @@ impl<A: ByteArray> ArrayString<A> {
 	pub fn insert_str(&mut self, idx: usize, string: &str) {
 		assert!(self.is_char_boundary(idx));
 
+		assert!(
+			self.len() + string.len() <= self.capacity(),
+			"ArrayString::insert_str: capacity overflow"
+		);
+
 		unsafe {
 			self.insert_bytes(idx, string.as_bytes());
 		}
 	}
 
+	/// Attempts to insert a string slice into this `ArrayString` at a byte
+	/// position.
+	///
+	/// This is an `O(n)` operation as it requires copying every element in the
+	/// buffer.
+	///
+	/// # Panics
+	///
+	/// Panics if `idx` is larger than the `String`'s length, or if it does not
+	/// lie on a [`char`] boundary.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the new length would be longer than the capacity of
+	/// the backing array.
+	///
+	/// [`char`]: https://doc.rust-lang.org/std/primitive.char.html
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::ArrayString;
+	/// let mut s = ArrayString::<[u8; 6]>::from("bar");
+	///
+	/// s.insert_str(0, "foo");
+	///
+	/// assert_eq!("foobar", s);
+	/// ```
+	#[inline]
+	pub fn try_insert_str<'other>(
+		&mut self,
+		idx: usize,
+		string: &'other str,
+	) -> Result<(), CapacityOverflowError<&'other str>> {
+		assert!(self.is_char_boundary(idx));
+
+		if self.len() + string.len() > self.capacity() {
+			Err(CapacityOverflowError {
+				overflow_amount: self.len() + string.len() - self.capacity(),
+				inner: string,
+			})
+		} else {
+			unsafe {
+				self.insert_bytes(idx, string.as_bytes());
+			}
+
+			Ok(())
+		}
+	}
+
+	/// Inserts bytes.
+	///
+	/// The new length must not overflow the capacity of the backing array.
+	///
+	/// The index must be <= the current length.
 	unsafe fn insert_bytes(&mut self, idx: usize, bytes: &[u8]) {
 		let len = self.len();
 		let amt = bytes.len();
-
-		assert!(
-			len + amt <= self.capacity(),
-			"ArrayString::insert_bytes: capacity overflow"
-		);
 
 		ptr::copy(
 			self.vec.as_ptr().add(idx),
@@ -1466,14 +1663,12 @@ impl<A: ByteArray> FromStr for ArrayString<A> {
 impl<A: ByteArray> fmt::Write for ArrayString<A> {
 	#[inline]
 	fn write_str(&mut self, s: &str) -> fmt::Result {
-		self.push_str(s);
-		Ok(())
+		self.try_push_str(s).map_err(|_| fmt::Error::default())
 	}
 
 	#[inline]
 	fn write_char(&mut self, c: char) -> fmt::Result {
-		self.push(c);
-		Ok(())
+		self.try_push(c).map_err(|_| fmt::Error::default())
 	}
 }
 
