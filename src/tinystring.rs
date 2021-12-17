@@ -459,17 +459,9 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	#[inline]
 	pub fn push_str(&mut self, string: &str) {
+		self.reserve(string.len());
 		match self {
-			TinyString::Inline(s) => match s.try_push_str(string) {
-				Ok(()) => (),
-				Err(_) => {
-					let mut heap =
-						String::with_capacity(s.len() + string.len());
-					heap.push_str(s.as_str());
-					heap.push_str(string);
-					*self = TinyString::Heap(heap);
-				}
-			},
+			TinyString::Inline(s) => s.push_str(string),
 			TinyString::Heap(s) => s.push_str(string),
 		}
 	}
@@ -493,17 +485,9 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	#[inline]
 	pub fn push(&mut self, ch: char) {
+		self.reserve(ch.len_utf8());
 		match self {
-			TinyString::Inline(s) => match s.try_push(ch) {
-				Ok(()) => (),
-				Err(_) => {
-					let mut heap =
-						String::with_capacity(s.len() + ch.len_utf8());
-					heap.push_str(s.as_str());
-					heap.push(ch);
-					*self = TinyString::Heap(heap);
-				}
-			},
+			TinyString::Inline(s) => s.push(ch),
 			TinyString::Heap(s) => s.push(ch),
 		}
 	}
@@ -662,18 +646,9 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	#[inline]
 	pub fn insert(self: &mut Self, idx: usize, ch: char) {
+		self.reserve(ch.len_utf8());
 		match self {
-			TinyString::Inline(s) => match s.try_insert(idx, ch) {
-				Ok(()) => (),
-				Err(_) => {
-					let mut heap =
-						String::with_capacity(s.len() + ch.len_utf8());
-					heap.push_str(&s[..idx]);
-					heap.push(ch);
-					heap.push_str(&s[idx..]);
-					*self = TinyString::Heap(heap);
-				}
-			},
+			TinyString::Inline(s) => s.insert(idx, ch),
 			TinyString::Heap(s) => s.insert(idx, ch),
 		}
 	}
@@ -703,18 +678,9 @@ impl<A: ByteArray> TinyString<A> {
 	/// ```
 	#[inline]
 	pub fn insert_str(self: &mut Self, idx: usize, string: &str) {
+		self.reserve(string.len());
 		match self {
-			TinyString::Inline(s) => match s.try_insert_str(idx, string) {
-				Ok(()) => (),
-				Err(_) => {
-					let mut heap =
-						String::with_capacity(s.len() + string.len());
-					heap.push_str(&s[..idx]);
-					heap.push_str(string);
-					heap.push_str(&s[idx..]);
-					*self = TinyString::Heap(heap);
-				}
-			},
+			TinyString::Inline(s) => s.insert_str(idx, string),
 			TinyString::Heap(s) => s.insert_str(idx, string),
 		}
 	}
