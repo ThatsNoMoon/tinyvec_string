@@ -444,6 +444,119 @@ impl<A: ByteArray> TinyString<A> {
 		}
 	}
 
+	/// Tries to reserve capacity for at least `additional` more bytes to be
+	/// inserted in the given `TinyString`. The collection may reserve more
+	/// space to avoid frequent reallocations. After calling `reserve`,
+	/// capacity will be greater than or equal to `self.len() + additional`.
+	/// Does nothing if capacity is already sufficient.
+	///
+	/// # Errors
+	///
+	/// If the capacity overflows, or the allocator reports a failure, then an error
+	/// is returned.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # const N: usize = 1;
+	/// # use tinyvec_string::TinyString;
+	/// use std::collections::TryReserveError;
+	///
+	/// fn process_data(data: &str) -> Result<TinyString<[u8; N]>, TryReserveError> {
+	///     let mut output = TinyString::new();
+	///
+	///     // Pre-reserve the memory, exiting if we can't
+	///     output.try_reserve(data.len())?;
+	///
+	///     // Now we know this can't OOM in the middle of our complex work
+	///     output.push_str(data);
+	///
+	///     Ok(output)
+	/// }
+	/// # process_data("rust").expect("why is the test harness OOMing on 4 bytes?");
+	/// ```
+	#[cfg_attr(docs_rs, doc(cfg(target_feature = "rustc_1_57")))]
+	#[cfg(feature = "rustc_1_57")]
+	pub fn try_reserve(
+		&mut self,
+		additional: usize,
+	) -> Result<(), alloc::collections::TryReserveError> {
+		match self {
+			TinyString::Inline(s) => match s.len().checked_add(additional) {
+				Some(new_cap) if new_cap > s.capacity() => {
+					let mut heap = String::new();
+					heap.try_reserve(new_cap)?;
+					heap.push_str(s.as_str());
+					*self = TinyString::Heap(heap);
+					Ok(())
+				}
+				Some(_) => Ok(()),
+				// need some way to create a capacity overflow error
+				None => String::new().try_reserve(usize::MAX),
+			},
+			TinyString::Heap(s) => s.try_reserve(additional),
+		}
+	}
+
+	/// Tries to reserve the minimum capacity for exactly `additional` more elements to
+	/// be inserted in the given `TinyString`. After calling `reserve_exact`,
+	/// capacity will be greater than or equal to `self.len() + additional`.
+	/// Does nothing if the capacity is already sufficient.
+	///
+	/// Note that the allocator may give the collection more space than it
+	/// requests. Therefore, capacity can not be relied upon to be precisely
+	/// minimal. Prefer [`try_reserve`] if future insertions are expected.
+	///
+	/// [`try_reserve`]: #method.try_reserve
+	///
+	/// # Errors
+	///
+	/// If the capacity overflows, or the allocator reports a failure, then an error
+	/// is returned.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # const N: usize = 1;
+	/// # use tinyvec_string::TinyString;
+	/// use std::collections::TryReserveError;
+	///
+	/// fn process_data(data: &str) -> Result<TinyString<[u8; N]>, TryReserveError> {
+	///     let mut output = TinyString::new();
+	///
+	///     // Pre-reserve the memory, exiting if we can't
+	///     output.try_reserve_exact(data.len())?;
+	///
+	///     // Now we know this can't OOM in the middle of our complex work
+	///     output.push_str(data);
+	///
+	///     Ok(output)
+	/// }
+	/// # process_data("rust").expect("why is the test harness OOMing on 4 bytes?");
+	/// ```
+	#[cfg_attr(docs_rs, doc(cfg(target_feature = "rustc_1_57")))]
+	#[cfg(feature = "rustc_1_57")]
+	pub fn try_reserve_exact(
+		&mut self,
+		additional: usize,
+	) -> Result<(), alloc::collections::TryReserveError> {
+		match self {
+			TinyString::Inline(s) => match s.len().checked_add(additional) {
+				Some(new_cap) if new_cap > s.capacity() => {
+					let mut heap = String::new();
+					heap.try_reserve_exact(new_cap)?;
+					heap.push_str(s.as_str());
+					*self = TinyString::Heap(heap);
+					Ok(())
+				}
+				Some(_) => Ok(()),
+				// need some way to create a capacity overflow error
+				None => String::new().try_reserve(usize::MAX),
+			},
+			TinyString::Heap(s) => s.try_reserve_exact(additional),
+		}
+	}
+
 	/// Appends a given string slice onto the end of this `TinyString`.
 	///
 	/// # Examples

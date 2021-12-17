@@ -37,6 +37,9 @@ some optimizations for Rust versions >= 1.40.
 The `rustc_1_55` feature enables usage of const generics to allow usage of
 backing arrays of any size.
 
+The `rustc_1_57` feature enables `TinyString::try_reserve` and
+`TinyString::try_reserve_exact`.
+
 ## Safety
 
 This crate strives to be as safe as possible. Almost all internal `unsafe`
