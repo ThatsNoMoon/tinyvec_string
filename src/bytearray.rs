@@ -39,11 +39,11 @@ pub unsafe trait ByteArray: tinyvec::Array<Item = u8> {
 
 #[cfg(not(feature = "rustc_1_55"))]
 macro_rules! impl_bytearray_for_len {
-  ($($len:expr),+ $(,)?) => {
-	$(unsafe impl ByteArray for [u8; $len] {
-		const DEFAULT: Self = [0u8; $len];
-	})+
-  }
+	($($len:expr),+ $(,)?) => {
+		$(unsafe impl ByteArray for [u8; $len] {
+			const DEFAULT: Self = [0u8; $len];
+		})+
+	}
 }
 
 #[cfg(not(feature = "rustc_1_55"))]
