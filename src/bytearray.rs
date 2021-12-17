@@ -53,6 +53,7 @@ impl_bytearray_for_len! {
 	4096,
 }
 
+#[cfg_attr(docs_rs, doc(cfg(target_feature = "rustc_1_55")))]
 #[cfg(feature = "rustc_1_55")]
 unsafe impl<const N: usize> ByteArray for [u8; N] {
 	const DEFAULT: Self = [0; N];
