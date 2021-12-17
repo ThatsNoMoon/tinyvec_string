@@ -1,7 +1,7 @@
 [package]
 name = "tinyvec_string"
-version = "0.2.0"
-authors = ["Benjamin Scherer <ThatsNoMoon.Alderaan@gmail.com>"]
+version = "0.2.1-beta.0"
+authors = ["ThatsNoMoon <git@thatsnomoon.dev>"]
 edition = "2018"
 description = "tinyvec based string types"
 readme = "README.md"
@@ -20,6 +20,8 @@ default = []
 alloc = ["tinyvec/alloc"]
 
 std = ["alloc"]
+
+rustc_1_40 = ["tinyvec/rustc_1_40"]
 
 [package.metadata.docs.rs]
 # Build docs with all features, show what things need a feature enabled

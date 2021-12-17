@@ -31,6 +31,9 @@ tinyvec_string = { version = "0.1.0", features = ["alloc"] }
 Error types implement `std::error::Error` when the `std` feature is
 enabled.
 
+The `rustc_1_40` feature enables `tinyvec`'s `rustc_1_40` feature, which enables
+some optimizations for Rust versions >= 1.40.
+
 ## Safety
 
 This crate strives to be as safe as possible. Almost all internal `unsafe`
