@@ -13,6 +13,9 @@
 /// Implementations are provided for `[u8; N]` for `N <= 32` and powers of 2
 /// <= 4096. Other implementations could be provided on request.
 ///
+/// Like `tinyvec`, `tinyvec_string`'s `rustc_1_55` feature provides
+/// implementations for `u8` arrays of all sizes.
+///
 /// # Safety
 /// Any types that implement this trait must have [`tinyvec::Array`]
 /// implementations that always return the same slices; i.e. between calls
@@ -34,6 +37,7 @@ pub unsafe trait ByteArray: tinyvec::Array<Item = u8> {
 	const DEFAULT: Self;
 }
 
+#[cfg(not(feature = "rustc_1_55"))]
 macro_rules! impl_bytearray_for_len {
   ($($len:expr),+ $(,)?) => {
 	$(unsafe impl ByteArray for [u8; $len] {
@@ -42,8 +46,14 @@ macro_rules! impl_bytearray_for_len {
   }
 }
 
+#[cfg(not(feature = "rustc_1_55"))]
 impl_bytearray_for_len! {
 	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
 	22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 64, 128, 256, 512, 1024, 2048,
 	4096,
+}
+
+#[cfg(feature = "rustc_1_55")]
+unsafe impl<const N: usize> ByteArray for [u8; N] {
+	const DEFAULT: Self = [0; N];
 }

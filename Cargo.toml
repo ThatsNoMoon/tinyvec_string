@@ -11,7 +11,7 @@ keywords = ["no_std", "string", "data-structures"]
 categories = ["no-std", "data-structures", "text-processing"]
 
 [dependencies]
-tinyvec = "1"
+tinyvec = "1.5"
 
 [features]
 
@@ -22,6 +22,8 @@ alloc = ["tinyvec/alloc"]
 std = ["alloc"]
 
 rustc_1_40 = ["tinyvec/rustc_1_40"]
+
+rustc_1_55 = ["tinyvec/rustc_1_55"]
 
 [package.metadata.docs.rs]
 # Build docs with all features, show what things need a feature enabled
