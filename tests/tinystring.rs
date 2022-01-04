@@ -67,16 +67,6 @@ fn test_from_utf8() {
 }
 
 #[test]
-fn test_push_bytes() {
-	let mut s = TinyString::<[u8; 16]>::from("ABC");
-	unsafe {
-		let mv = s.as_mut_vec();
-		mv.extend_from_slice(&[b'D']);
-	}
-	assert_eq!(s, "ABCD");
-}
-
-#[test]
 fn test_push_str() {
 	let mut s = TinyString::<[u8; 64]>::new();
 	s.push_str("");
