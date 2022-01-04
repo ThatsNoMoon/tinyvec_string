@@ -1,6 +1,6 @@
 [package]
 name = "tinyvec_string"
-version = "0.3.1-beta.0"
+version = "0.3.1"
 authors = ["ThatsNoMoon <git@thatsnomoon.dev>"]
 edition = "2018"
 description = "tinyvec based string types"
