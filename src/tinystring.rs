@@ -885,6 +885,24 @@ impl<A: ByteArray> TinyString<A> {
 		}
 	}
 
+	/// Move this `TinyString` to the heap.
+	///
+	/// Has no effect if this string is already on the heap.
+	///
+	/// # Examples
+	///
+	/// Basic usage:
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 8]>::new();
+	///
+	/// assert!(s.is_inline());
+	///
+	/// s.move_to_the_heap();
+	///
+	/// assert!(s.is_heap());
+	/// ```
 	#[inline]
 	pub fn move_to_the_heap(&mut self) {
 		match self {

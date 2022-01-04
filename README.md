@@ -25,7 +25,7 @@ it has a dependency on `alloc`:
 
 ```toml
 [dependencies]
-tinyvec_string = { version = "0.3.1", features = ["alloc"] }
+tinyvec_string = { version = "0.3.2", features = ["alloc"] }
 ```
 
 Error types implement `std::error::Error` when the `std` feature is

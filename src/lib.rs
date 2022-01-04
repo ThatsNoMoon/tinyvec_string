@@ -4,7 +4,7 @@
 //! * [`ArrayString`], a string backed by a fixed-size array on the stack,
 //!   using [`ArrayVec`]
 //! * [`TinyString`], a string backed by either a fixed-size array on the stack
-//!   or a [`Vec`] on the heap, using [`TinyVec`]
+//!   or a [`Vec`] on the heap
 //!
 //! ## Features
 //!
@@ -17,17 +17,31 @@
 //!
 //! ```toml
 //! [dependencies]
-//! tinyvec_string = { version = "0.1.0", features = ["alloc"] }
+//! tinyvec_string = { version = "0.3.2", features = ["alloc"] }
 //! ```
 //!
-//! Error types implement [`std::error::Error`] when the `std` feature is
+//! Error types implement `std::error::Error` when the `std` feature is
 //! enabled.
+//!
+//! The `rustc_1_40` feature enables `tinyvec`'s `rustc_1_40` feature, which enables
+//! some optimizations for Rust versions >= 1.40.
+//!
+//! The `rustc_1_55` feature enables usage of const generics to allow usage of
+//! backing arrays of any size.
+//!
+//! The `rustc_1_57` feature enables `TinyString::try_reserve` and
+//! `TinyString::try_reserve_exact`.
 //!
 //! ## Safety
 //!
 //! This crate strives to be as safe as possible. Almost all internal `unsafe`
 //! code is copied verbatim from `std`'s `String` implementation for maximum
 //! reliability and performance.
+//!
+//! ## MSRV
+//!
+//! Like `tinyvec`, `tinyvec_string` (without `rustc` version features) supports
+//! Rust 1.34+. The `alloc` feature requires Rust 1.36+.
 //!
 //! [`tinyvec`]: tinyvec/index.html
 //! [`ArrayString`]: arraystring/struct.ArrayString.html
