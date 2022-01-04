@@ -655,7 +655,7 @@ impl<A: ByteArray> TinyString<A> {
 
 	/// Shrinks the capacity of this `TinyString` with a lower bound.
 	///
-	/// The capacity will remain at least as large as both the length, the
+	/// The capacity will remain at least as large as the length, the
 	/// supplied value, and the inline capacity.
 	///
 	/// If the `TinyString` is on the heap, and the new capacity is less than
