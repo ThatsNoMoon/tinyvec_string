@@ -71,6 +71,32 @@ impl<A: ByteArray> TinyString<A> {
 		TinyString::default()
 	}
 
+	/// Creates a new empty `TinyString` with the provided capacity.
+	///
+	/// If the provided capacity is less than or equal to the inline capacity,
+	/// the returned `TinyString` will be inline, otherwise it will be on the
+	/// heap.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let s = TinyString::<[u8; 8]>::with_capacity(8);
+	/// assert!(s.is_inline());
+	/// assert_eq!(s.capacity(), 8);
+	///
+	/// let s = TinyString::<[u8; 8]>::with_capacity(16);
+	/// assert!(s.is_heap());
+	/// assert!(s.capacity() >= 16);
+	/// ```
+	pub fn with_capacity(capacity: usize) -> TinyString<A> {
+		if capacity <= A::CAPACITY {
+			TinyString::Inline(ArrayString::default())
+		} else {
+			TinyString::Heap(String::with_capacity(capacity))
+		}
+	}
+
 	/// Converts a vector of bytes to an `TinyString`.
 	///
 	/// The inverse of this method is [`into_bytes`].
@@ -318,6 +344,44 @@ impl<A: ByteArray> TinyString<A> {
 		self.len() == 0
 	}
 
+	/// Returns `true` if this `TinyString` is on the heap, and `false`
+	/// otherwise.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 5]>::new();
+	/// s.push_str("hello world");
+	/// assert!(s.is_heap());
+	/// ```
+	#[inline]
+	pub fn is_heap(&self) -> bool {
+		match self {
+			TinyString::Inline(_) => false,
+			TinyString::Heap(_) => true,
+		}
+	}
+
+	/// Returns `true` if this `TinyString` is inline, and `false`
+	/// otherwise.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 16]>::new();
+	/// s.push_str("hello world");
+	/// assert!(s.is_inline());
+	/// ```
+	#[inline]
+	pub fn is_inline(&self) -> bool {
+		match self {
+			TinyString::Inline(_) => true,
+			TinyString::Heap(_) => false,
+		}
+	}
+
 	/// Ensures that this `TinyString`'s capacity is at least `additional` bytes
 	/// larger than its length.
 	///
@@ -554,6 +618,73 @@ impl<A: ByteArray> TinyString<A> {
 				None => String::new().try_reserve(usize::MAX),
 			},
 			TinyString::Heap(s) => s.try_reserve_exact(additional),
+		}
+	}
+
+	/// Shrinks the capacity of this `TinyString` to match its length.
+	///
+	/// If the `TinyString` is on the heap, and the current length is less than
+	/// or equal to its inline capacity, then the `TinyString` is made inline.
+	///
+	/// # Examples
+	///
+	/// Basic usage:
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 5]>::from("foo");
+	///
+	/// s.reserve(100);
+	/// assert!(s.capacity() >= 100);
+	///
+	/// s.shrink_to_fit();
+	/// assert_eq!(5, s.capacity());
+	/// ```
+	pub fn shrink_to_fit(&mut self) {
+		if self.is_heap() {
+			if self.len() <= A::CAPACITY {
+				*self = TinyString::Inline(ArrayString::from(self.as_str()));
+			} else {
+				match self {
+					TinyString::Heap(s) => s.shrink_to_fit(),
+					TinyString::Inline(_) => unreachable!(),
+				}
+			}
+		}
+	}
+
+	/// Shrinks the capacity of this `TinyString` with a lower bound.
+	///
+	/// The capacity will remain at least as large as both the length, the
+	/// supplied value, and the inline capacity.
+	///
+	/// If the `TinyString` is on the heap, and the new capacity is less than
+	/// or equal to its inline capacity, then the `TinyString` is made inline.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// # use tinyvec_string::TinyString;
+	/// let mut s = TinyString::<[u8; 5]>::from("foo");
+	///
+	/// s.reserve(100);
+	/// assert!(s.capacity() >= 100);
+	///
+	/// s.shrink_to(10);
+	/// assert!(s.capacity() >= 10);
+	/// s.shrink_to(0);
+	/// assert!(s.capacity() >= 5);
+	/// ```
+	pub fn shrink_to(&mut self, min_capacity: usize) {
+		if self.is_heap() {
+			if self.len().max(min_capacity) <= A::CAPACITY {
+				*self = TinyString::Inline(ArrayString::from(self.as_str()));
+			} else {
+				match self {
+					TinyString::Heap(s) => s.shrink_to(min_capacity),
+					TinyString::Inline(_) => unreachable!(),
+				}
+			}
 		}
 	}
 
