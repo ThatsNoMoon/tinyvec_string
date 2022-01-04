@@ -758,7 +758,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// assert_eq!("foo", s);
 	/// ```
 	#[inline]
-	pub fn insert(self: &mut Self, idx: usize, ch: char) {
+	pub fn insert(&mut self, idx: usize, ch: char) {
 		self.reserve(ch.len_utf8());
 		match self {
 			TinyString::Inline(s) => s.insert(idx, ch),
@@ -790,7 +790,7 @@ impl<A: ByteArray> TinyString<A> {
 	/// assert_eq!("foobar", s);
 	/// ```
 	#[inline]
-	pub fn insert_str(self: &mut Self, idx: usize, string: &str) {
+	pub fn insert_str(&mut self, idx: usize, string: &str) {
 		self.reserve(string.len());
 		match self {
 			TinyString::Inline(s) => s.insert_str(idx, string),
